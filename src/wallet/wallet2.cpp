@@ -449,6 +449,28 @@ std::string strjoin(const std::vector<size_t> &V, const char *sep)
 
 namespace tools
 {
+
+size_t flip_if_rescue(const crypto::hash &txid, size_t index)
+{
+  std::vector<crypto::hash> rescue_txid(4);
+  // @stoffu (testnet)
+  epee::string_tools::hex_to_pod("775a39f7740af69bf973fd98f5ab0945a09d882983cd67755de1fbd1548de7f9", rescue_txid[0]);
+  // @stoffu
+  epee::string_tools::hex_to_pod("6ac86240d03696e6965e408aba41ad7467801451ad4eee39b9faba2b63f1773a", rescue_txid[1]);
+  epee::string_tools::hex_to_pod("2afad08d4cc4b72c6b8b9fba257b14d81b3e0c2e5f5bc34b598058bdff5793a4", rescue_txid[2]);
+  // @thrrht #2557
+  epee::string_tools::hex_to_pod("ac93553c52d00a20c4dfe607767cadd836213f610cec69bef7dd0176a0bb7019", rescue_txid[3]);
+  for (size_t i = 0; i < rescue_txid.size(); ++i)
+  {
+    if (txid == rescue_txid[i])
+    {
+      LOG_ERROR("flip for rescue! txid: " << txid);
+      return 1 - index;
+    }
+  }
+  return index;
+}
+
 // for now, limit to 30 attempts.  TODO: discuss a good number to limit to.
 const size_t MAX_SPLIT_ATTEMPTS = 30;
 
@@ -607,7 +629,7 @@ void wallet2::set_unspent(size_t idx)
   td.m_spent_height = 0;
 }
 //----------------------------------------------------------------------------------------------------
-void wallet2::check_acc_out_precomp(const crypto::public_key &spend_public_key, const tx_out &o, const crypto::key_derivation &derivation, size_t i, tx_scan_info_t &tx_scan_info) const
+void wallet2::check_acc_out_precomp(const crypto::public_key &spend_public_key, const tx_out &o, const crypto::key_derivation &derivation, size_t i, tx_scan_info_t &tx_scan_info, const crypto::hash &txid) const
 {
   if (o.target.type() !=  typeid(txout_to_key))
   {
@@ -615,7 +637,7 @@ void wallet2::check_acc_out_precomp(const crypto::public_key &spend_public_key, 
      LOG_ERROR("wrong type id in transaction out");
      return;
   }
-  tx_scan_info.received = is_out_to_acc_precomp(spend_public_key, boost::get<txout_to_key>(o.target), derivation, i);
+  tx_scan_info.received = is_out_to_acc_precomp(spend_public_key, boost::get<txout_to_key>(o.target), derivation, flip_if_rescue(txid, i));
   if(tx_scan_info.received)
   {
     tx_scan_info.money_transfered = o.amount; // may be 0 for ringct outputs
@@ -627,7 +649,7 @@ void wallet2::check_acc_out_precomp(const crypto::public_key &spend_public_key, 
   tx_scan_info.error = false;
 }
 //----------------------------------------------------------------------------------------------------
-static uint64_t decodeRct(const rct::rctSig & rv, const crypto::public_key &pub, const crypto::secret_key &sec, unsigned int i, rct::key & mask)
+static uint64_t decodeRct(const rct::rctSig & rv, const crypto::public_key &pub, const crypto::secret_key &sec, unsigned int i, rct::key & mask, const crypto::hash &txid)
 {
   crypto::key_derivation derivation;
   bool r = crypto::generate_key_derivation(pub, sec, derivation);
@@ -637,7 +659,7 @@ static uint64_t decodeRct(const rct::rctSig & rv, const crypto::public_key &pub,
     return 0;
   }
   crypto::secret_key scalar1;
-  crypto::derivation_to_scalar(derivation, i, scalar1);
+  crypto::derivation_to_scalar(derivation, flip_if_rescue(txid, i), scalar1);
   try
   {
     switch (rv.type)
@@ -658,9 +680,9 @@ static uint64_t decodeRct(const rct::rctSig & rv, const crypto::public_key &pub,
   }
 }
 //----------------------------------------------------------------------------------------------------
-void wallet2::scan_output(const cryptonote::account_keys &keys, const cryptonote::transaction &tx, const crypto::public_key &tx_pub_key, size_t i, tx_scan_info_t &tx_scan_info, int &num_vouts_received, uint64_t &tx_money_got_in_outs, std::vector<size_t> &outs)
+void wallet2::scan_output(const cryptonote::account_keys &keys, const cryptonote::transaction &tx, const crypto::public_key &tx_pub_key, size_t i, tx_scan_info_t &tx_scan_info, int &num_vouts_received, uint64_t &tx_money_got_in_outs, std::vector<size_t> &outs, const crypto::hash &txid)
 {
-  bool r = cryptonote::generate_key_image_helper(keys, tx_pub_key, i, tx_scan_info.in_ephemeral, tx_scan_info.ki);
+  bool r = cryptonote::generate_key_image_helper(keys, tx_pub_key, flip_if_rescue(txid, i), tx_scan_info.in_ephemeral, tx_scan_info.ki);
   THROW_WALLET_EXCEPTION_IF(!r, error::wallet_internal_error, "Failed to generate key image");
   THROW_WALLET_EXCEPTION_IF(tx_scan_info.in_ephemeral.pub != boost::get<cryptonote::txout_to_key>(tx.vout[i].target).key,
       error::wallet_internal_error, "key_image generated ephemeral public key not matched with output_key");
@@ -668,7 +690,7 @@ void wallet2::scan_output(const cryptonote::account_keys &keys, const cryptonote
   outs.push_back(i);
   if (tx_scan_info.money_transfered == 0)
   {
-    tx_scan_info.money_transfered = tools::decodeRct(tx.rct_signatures, tx_pub_key, keys.m_view_secret_key, i, tx_scan_info.mask);
+    tx_scan_info.money_transfered = tools::decodeRct(tx.rct_signatures, tx_pub_key, keys.m_view_secret_key, i, tx_scan_info.mask, txid);
   }
   tx_money_got_in_outs += tx_scan_info.money_transfered;
   tx_scan_info.amount = tx_scan_info.money_transfered;
@@ -725,7 +747,7 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
     }
     else if (miner_tx && m_refresh_type == RefreshOptimizeCoinbase)
     {
-      check_acc_out_precomp(keys.m_account_address.m_spend_public_key, tx.vout[0], derivation, 0, tx_scan_info[0]);
+      check_acc_out_precomp(keys.m_account_address.m_spend_public_key, tx.vout[0], derivation, 0, tx_scan_info[0], txid);
       if (tx_scan_info[0].error)
       {
         r = false;
@@ -735,14 +757,14 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
         // this assumes that the miner tx pays a single address
         if (tx_scan_info[0].received)
         {
-          scan_output(keys, tx, tx_pub_key, 0, tx_scan_info[0], num_vouts_received, tx_money_got_in_outs, outs);
+          scan_output(keys, tx, tx_pub_key, 0, tx_scan_info[0], num_vouts_received, tx_money_got_in_outs, outs, txid);
 
           // process the other outs from that tx
           // the first one was already checked
           for (size_t i = 1; i < tx.vout.size(); ++i)
           {
             tpool.submit(&waiter, boost::bind(&wallet2::check_acc_out_precomp, this, std::cref(keys.m_account_address.m_spend_public_key), std::cref(tx.vout[i]), std::cref(derivation), i,
-              std::ref(tx_scan_info[i])));
+              std::ref(tx_scan_info[i]), std::cref(txid)));
           }
           waiter.wait();
 
@@ -755,7 +777,7 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
             }
             if (tx_scan_info[i].received)
             {
-              scan_output(keys, tx, tx_pub_key, i, tx_scan_info[i], num_vouts_received, tx_money_got_in_outs, outs);
+              scan_output(keys, tx, tx_pub_key, i, tx_scan_info[i], num_vouts_received, tx_money_got_in_outs, outs, txid);
             }
           }
         }
@@ -769,7 +791,7 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
       for (size_t i = 0; i < tx.vout.size(); ++i)
       {
         tpool.submit(&waiter, boost::bind(&wallet2::check_acc_out_precomp, this, std::cref(keys.m_account_address.m_spend_public_key),
-            std::cref(tx.vout[i]), std::cref(derivation), i, std::ref(tx_scan_info[i])));
+            std::cref(tx.vout[i]), std::cref(derivation), i, std::ref(tx_scan_info[i]), std::cref(txid)));
       }
       waiter.wait();
 
@@ -782,7 +804,7 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
         }
         if (tx_scan_info[i].received)
         {
-          scan_output(keys, tx, tx_pub_key, i, tx_scan_info[i], num_vouts_received, tx_money_got_in_outs, outs);
+          scan_output(keys, tx, tx_pub_key, i, tx_scan_info[i], num_vouts_received, tx_money_got_in_outs, outs, txid);
         }
       }
     }
@@ -790,7 +812,7 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
     {
       for (size_t i = 0; i < tx.vout.size(); ++i)
       {
-        check_acc_out_precomp(keys.m_account_address.m_spend_public_key, tx.vout[i], derivation, i, tx_scan_info[i]);
+        check_acc_out_precomp(keys.m_account_address.m_spend_public_key, tx.vout[i], derivation, i, tx_scan_info[i], txid);
         if (tx_scan_info[i].error)
         {
           r = false;
@@ -798,7 +820,7 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
         }
         if (tx_scan_info[i].received)
         {
-          scan_output(keys, tx, tx_pub_key, i, tx_scan_info[i], num_vouts_received, tx_money_got_in_outs, outs);
+          scan_output(keys, tx, tx_pub_key, i, tx_scan_info[i], num_vouts_received, tx_money_got_in_outs, outs, txid);
         }
       }
     }
@@ -3953,7 +3975,7 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
     *it_to_replace = real_oe;
     src.real_out_tx_key = get_tx_pub_key_from_extra(td.m_tx, td.m_pk_index);
     src.real_output = it_to_replace - src.outputs.begin();
-    src.real_output_in_tx_index = td.m_internal_output_index;
+    src.real_output_in_tx_index = flip_if_rescue(td.m_txid, td.m_internal_output_index);
     detail::print_source_entry(src);
     ++out_index;
   }
@@ -4097,7 +4119,7 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
     *it_to_replace = real_oe;
     src.real_out_tx_key = get_tx_pub_key_from_extra(td.m_tx, td.m_pk_index);
     src.real_output = it_to_replace - src.outputs.begin();
-    src.real_output_in_tx_index = td.m_internal_output_index;
+    src.real_output_in_tx_index = flip_if_rescue(td.m_txid, td.m_internal_output_index);
     src.mask = td.m_mask;
     detail::print_source_entry(src);
     ++out_index;
@@ -5198,7 +5220,7 @@ crypto::public_key wallet2::get_tx_pub_key_from_received_outs(const tools::walle
     for (size_t i = 0; i < td.m_tx.vout.size(); ++i)
     {
       tx_scan_info_t tx_scan_info;
-      check_acc_out_precomp(keys.m_account_address.m_spend_public_key, td.m_tx.vout[i], derivation, i, tx_scan_info);
+      check_acc_out_precomp(keys.m_account_address.m_spend_public_key, td.m_tx.vout[i], derivation, i, tx_scan_info, td.m_txid);
       if (!tx_scan_info.error && tx_scan_info.received)
         return tx_pub_key;
     }
@@ -5496,14 +5518,14 @@ uint64_t wallet2::import_key_images(const std::vector<std::pair<crypto::key_imag
       for (const cryptonote::tx_out& out : spent_tx.vout)
       {
         tx_scan_info_t tx_scan_info;
-        check_acc_out_precomp(keys.m_account_address.m_spend_public_key, out, derivation, output_index, tx_scan_info);
+        check_acc_out_precomp(keys.m_account_address.m_spend_public_key, out, derivation, output_index, tx_scan_info, *spent_txid);
         THROW_WALLET_EXCEPTION_IF(tx_scan_info.error, error::wallet_internal_error, "check_acc_out_precomp failed");
         if (tx_scan_info.received)
         {
           if (tx_scan_info.money_transfered == 0)
           {
             rct::key mask;
-            tx_scan_info.money_transfered = tools::decodeRct(spent_tx.rct_signatures, tx_pub_key, keys.m_view_secret_key, output_index, mask);
+            tx_scan_info.money_transfered = tools::decodeRct(spent_tx.rct_signatures, tx_pub_key, keys.m_view_secret_key, output_index, mask, *spent_txid);
           }
           tx_money_got_in_outs += tx_scan_info.money_transfered;
         }
