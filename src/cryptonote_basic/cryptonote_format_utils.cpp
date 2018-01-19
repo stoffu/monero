@@ -818,7 +818,7 @@ namespace cryptonote
       const size_t inputs = t.vin.size();
       const size_t outputs = t.vout.size();
       const size_t mixin = t.vin.empty() ? 0 : t.vin[0].type() == typeid(txin_to_key) ? boost::get<txin_to_key>(t.vin[0]).key_offsets.size() - 1 : 0;
-      bool r = tt.rct_signatures.p.serialize_rctsig_prunable(ba, t.rct_signatures.type, inputs, outputs, mixin);
+      bool r = tt.rct_signatures.p.serialize_rctsig_prunable(ba, t.rct_signatures.type, t.rct_signatures.borromeanInputs, inputs, outputs, mixin);
       CHECK_AND_ASSERT_MES(r, false, "Failed to serialize rct signatures prunable");
       cryptonote::get_blob_hash(ss.str(), hashes[2]);
     }

@@ -36,6 +36,7 @@
 #include <vector>
 #include <iostream>
 #include <cinttypes>
+#include <boost/serialization/version.hpp>
 
 extern "C" {
 #include "crypto/crypto-ops.h"
@@ -226,6 +227,7 @@ namespace rct {
     };
     struct rctSigBase {
         uint8_t type;
+        bool borromeanInputs;
         key message;
         ctkeyM mixRing; //the set of all pubkeys / copy
         //pairs that you mix with
@@ -242,6 +244,7 @@ namespace rct {
             return true;
           if (type != RCTTypeFull && type != RCTTypeFullBulletproof && type != RCTTypeSimple && type != RCTTypeSimpleBulletproof)
             return false;
+          FIELD(borromeanInputs)
           VARINT_FIELD(txnFee)
           // inputs/outputs not saved, only here for serialization help
           // FIELD(message) - not serialized, it can be reconstructed
@@ -296,7 +299,7 @@ namespace rct {
         std::vector<mgSig> MGs; // simple rct has N, full has 1
 
         template<bool W, template <bool> class Archive>
-        bool serialize_rctsig_prunable(Archive<W> &ar, uint8_t type, size_t inputs, size_t outputs, size_t mixin)
+        bool serialize_rctsig_prunable(Archive<W> &ar, uint8_t type, bool borromeanInputs, size_t inputs, size_t outputs, size_t mixin)
         {
           if (type == RCTTypeNull)
             return true;
@@ -372,8 +375,11 @@ namespace rct {
             }
             ar.end_array();
 
-            ar.tag("cc");
-            FIELDS(MGs[i].cc)
+            if (!borromeanInputs)
+            {
+              ar.tag("cc");
+              FIELDS(MGs[i].cc)
+            }
             // MGs[i].II not saved, it can be reconstructed
             ar.end_object();
 
@@ -381,6 +387,11 @@ namespace rct {
                ar.delimit_array();
           }
           ar.end_array();
+          if (borromeanInputs)
+          {
+            ar.tag("cc");
+            FIELDS(MGs[0].cc)
+          }
           return true;
         }
 
@@ -575,5 +586,7 @@ VARIANT_TAG(json_archive, rct::rctSig, "rct_rctSig");
 VARIANT_TAG(json_archive, rct::Bulletproof, "rct_bulletproof");
 VARIANT_TAG(json_archive, rct::multisig_kLRki, "rct_multisig_kLR");
 VARIANT_TAG(json_archive, rct::multisig_out, "rct_multisig_out");
+
+BOOST_CLASS_VERSION(rct::rctSigBase, 1)
 
 #endif  /* RCTTYPES_H */

@@ -939,6 +939,7 @@ void toJsonValue(rapidjson::Document& doc, const rct::rctSig& sig, rapidjson::Va
   val.SetObject();
 
   INSERT_INTO_JSON_OBJECT(val, doc, type, sig.type);
+  INSERT_INTO_JSON_OBJECT(val, doc, borromeanInputs, sig.borromeanInputs);
   INSERT_INTO_JSON_OBJECT(val, doc, message, sig.message);
   INSERT_INTO_JSON_OBJECT(val, doc, mixRing, sig.mixRing);
   INSERT_INTO_JSON_OBJECT(val, doc, pseudoOuts, sig.pseudoOuts);
@@ -956,6 +957,7 @@ void fromJsonValue(const rapidjson::Value& val, rct::rctSig& sig)
   }
 
   GET_FROM_JSON_OBJECT(val, sig.type, type);
+  GET_FROM_JSON_OBJECT(val, sig.borromeanInputs, borromeanInputs);
   GET_FROM_JSON_OBJECT(val, sig.message, message);
   GET_FROM_JSON_OBJECT(val, sig.mixRing, mixRing);
   GET_FROM_JSON_OBJECT(val, sig.pseudoOuts, pseudoOuts);

@@ -304,6 +304,9 @@ namespace boost
     a & x.ecdhInfo;
     serializeOutPk(a, x.outPk, ver);
     a & x.txnFee;
+    if (ver < 1)
+      return;
+    a & x.borromeanInputs;
   }
 
   template <class Archive>
