@@ -392,7 +392,7 @@ bool t_rpc_command_executor::show_status() {
   }
   else
   {
-    if (!m_rpc_server->on_get_info(ireq, ires) || ires.status != CORE_RPC_STATUS_OK)
+    if (!m_rpc_server->on_get_info(ireq, ires, true) || ires.status != CORE_RPC_STATUS_OK)
     {
       tools::fail_msg_writer() << make_error(fail_message, ires.status);
       return true;
@@ -1820,7 +1820,7 @@ bool t_rpc_command_executor::sync_info()
     }
     else
     {
-        if (!m_rpc_server->on_sync_info(req, res, error_resp) || res.status != CORE_RPC_STATUS_OK)
+        if (!m_rpc_server->on_sync_info(req, res, error_resp, true) || res.status != CORE_RPC_STATUS_OK)
         {
             tools::fail_msg_writer() << make_error(fail_message, res.status);
             return true;
