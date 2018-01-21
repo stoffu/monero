@@ -164,7 +164,7 @@ namespace tools
 
     static bool verify_password(const std::string& keys_file_name, const epee::wipeable_string& password, bool no_spend_key);
 
-    wallet2(bool testnet = false, bool restricted = false);
+    wallet2(bool testnet = false, bool restricted = false, bool daemon_bootstrap = false);
 
     struct multisig_info
     {
@@ -1029,6 +1029,13 @@ namespace tools
     rct::multisig_kLRki get_multisig_kLRki(size_t n, const rct::key &k) const;
     rct::key get_multisig_k(size_t idx, const std::unordered_set<rct::key> &used_L) const;
     void update_multisig_rescan_info(const std::vector<std::vector<rct::key>> &multisig_k, const std::vector<std::vector<tools::wallet2::multisig_info>> &info, size_t n);
+
+    epee::net_utils::http::http_simple_client m_http_client_local;
+    bool m_daemon_bootstrap;
+    std::chrono::system_clock::time_point m_bootstrap_last_check;
+    bool m_should_use_bootstrap;
+    boost::mutex m_bootstrap_mutex;
+    epee::net_utils::http::http_simple_client& choose_http_client();
 
     cryptonote::account_base m_account;
     boost::optional<epee::net_utils::http::login> m_daemon_login;
