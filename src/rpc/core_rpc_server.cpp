@@ -1243,7 +1243,7 @@ namespace cryptonote
       ++top_height; // turn top block height into blockchain height
       uint64_t target_height = m_core.get_target_blockchain_height();
 
-      m_should_use_bootstrap_daemon = top_height < target_height;
+      m_should_use_bootstrap_daemon = target_height ? top_height < target_height : true;
       MINFO((m_should_use_bootstrap_daemon ? "Using" : "Not using") << " the bootstrap daemon (top height: " << top_height << ", target height: " << target_height << ")");
     }
     return m_should_use_bootstrap_daemon;
