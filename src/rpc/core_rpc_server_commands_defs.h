@@ -930,6 +930,7 @@ namespace cryptonote
       uint64_t free_space;
       bool offline;
       bool untrusted;
+      uint64_t height_without_bootstrap;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(status)
@@ -953,6 +954,7 @@ namespace cryptonote
         KV_SERIALIZE(free_space)
         KV_SERIALIZE(offline)
         KV_SERIALIZE(untrusted)
+        KV_SERIALIZE(height_without_bootstrap)
       END_KV_SERIALIZE_MAP()
     };
   };

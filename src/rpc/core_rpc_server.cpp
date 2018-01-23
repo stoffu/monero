@@ -164,6 +164,9 @@ namespace cryptonote
     {
       bool r = use_bootstrap_daemon<COMMAND_RPC_GET_INFO>("/getinfo", req, res);
       res.untrusted = true;
+      crypto::hash top_hash;
+      m_core.get_blockchain_top(res.height_without_bootstrap, top_hash);
+      ++res.height_without_bootstrap;
       return r;
     }
     crypto::hash top_hash;
@@ -190,6 +193,7 @@ namespace cryptonote
     res.free_space = m_restricted ? std::numeric_limits<uint64_t>::max() : m_core.get_free_space();
     res.offline = m_core.offline();
     res.untrusted = false;
+    res.height_without_bootstrap = 0;
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
@@ -1513,6 +1517,9 @@ namespace cryptonote
     {
       bool r = use_bootstrap_daemon_json<COMMAND_RPC_GET_INFO>("get_info", req, res);
       res.untrusted = true;
+      crypto::hash top_hash;
+      m_core.get_blockchain_top(res.height_without_bootstrap, top_hash);
+      ++res.height_without_bootstrap;
       return r;
     }
 
@@ -1540,6 +1547,7 @@ namespace cryptonote
     res.free_space = m_restricted ? std::numeric_limits<uint64_t>::max() : m_core.get_free_space();
     res.offline = m_core.offline();
     res.untrusted = false;
+    res.height_without_bootstrap = 0;
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
