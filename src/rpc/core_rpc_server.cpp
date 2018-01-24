@@ -160,6 +160,7 @@ namespace cryptonote
   bool core_rpc_server::on_get_info(const COMMAND_RPC_GET_INFO::request& req, COMMAND_RPC_GET_INFO::response& res, bool no_bootstrap)
   {
     PERF_TIMER(on_get_info);
+    res.bootstrap_daemon_address = m_bootstrap_daemon_address;
     if (!no_bootstrap && should_use_bootstrap_daemon())
     {
       bool r = use_bootstrap_daemon<COMMAND_RPC_GET_INFO>("/getinfo", req, res);
@@ -193,7 +194,7 @@ namespace cryptonote
     res.free_space = m_restricted ? std::numeric_limits<uint64_t>::max() : m_core.get_free_space();
     res.offline = m_core.offline();
     res.untrusted = false;
-    res.height_without_bootstrap = 0;
+    res.height_without_bootstrap = res.height;
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
@@ -1514,6 +1515,7 @@ namespace cryptonote
   bool core_rpc_server::on_get_info_json(const COMMAND_RPC_GET_INFO::request& req, COMMAND_RPC_GET_INFO::response& res, epee::json_rpc::error& error_resp, bool no_bootstrap)
   {
     PERF_TIMER(on_get_info_json);
+    res.bootstrap_daemon_address = m_bootstrap_daemon_address;
     if (!no_bootstrap && should_use_bootstrap_daemon())
     {
       bool r = use_bootstrap_daemon_json<COMMAND_RPC_GET_INFO>("get_info", req, res);
@@ -1548,7 +1550,7 @@ namespace cryptonote
     res.free_space = m_restricted ? std::numeric_limits<uint64_t>::max() : m_core.get_free_space();
     res.offline = m_core.offline();
     res.untrusted = false;
-    res.height_without_bootstrap = 0;
+    res.height_without_bootstrap = res.height;
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------

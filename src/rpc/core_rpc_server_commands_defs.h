@@ -929,6 +929,7 @@ namespace cryptonote
       uint64_t start_time;
       uint64_t free_space;
       bool offline;
+      std::string bootstrap_daemon_address;
       bool untrusted;
       uint64_t height_without_bootstrap;
 
@@ -954,6 +955,7 @@ namespace cryptonote
         KV_SERIALIZE(free_space)
         KV_SERIALIZE(offline)
         KV_SERIALIZE(untrusted)
+        KV_SERIALIZE(bootstrap_daemon_address)
         KV_SERIALIZE(height_without_bootstrap)
       END_KV_SERIALIZE_MAP()
     };
