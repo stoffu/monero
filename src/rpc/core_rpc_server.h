@@ -223,13 +223,9 @@ private:
     //utils
     uint64_t get_block_reward(const block& blk);
     bool fill_block_header_response(const block& blk, bool orphan_status, uint64_t height, const crypto::hash& hash, block_header_response& response);
-    bool should_use_bootstrap_daemon();
+    enum invoke_http_mode { JON, BIN, JON_RPC };
     template <typename COMMAND_TYPE>
-    bool use_bootstrap_daemon(const std::string &command_name, const typename COMMAND_TYPE::request& req, typename COMMAND_TYPE::response& res);
-    template <typename COMMAND_TYPE>
-    bool use_bootstrap_daemon_bin(const std::string &command_name, const typename COMMAND_TYPE::request& req, typename COMMAND_TYPE::response& res);
-    template <typename COMMAND_TYPE>
-    bool use_bootstrap_daemon_json(const std::string &command_name, const typename COMMAND_TYPE::request& req, typename COMMAND_TYPE::response& res);
+    bool use_bootstrap_daemon_if_necessary(const invoke_http_mode &mode, const std::string &command_name, const typename COMMAND_TYPE::request& req, typename COMMAND_TYPE::response& res, bool &r);
     
     core& m_core;
     nodetool::node_server<cryptonote::t_cryptonote_protocol_handler<cryptonote::core> >& m_p2p;
