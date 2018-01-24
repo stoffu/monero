@@ -150,8 +150,11 @@ namespace cryptonote
     PERF_TIMER(on_get_height);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon<COMMAND_RPC_GET_HEIGHT>("/getheight", req, res);
+      bool r = use_bootstrap_daemon<COMMAND_RPC_GET_HEIGHT>("/getheight", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     res.height = m_core.get_current_blockchain_height();
     res.status = CORE_RPC_STATUS_OK;
     return true;
@@ -220,8 +223,11 @@ namespace cryptonote
     PERF_TIMER(on_get_blocks);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_bin<COMMAND_RPC_GET_BLOCKS_FAST>("/getblocks.bin", req, res);
+      bool r = use_bootstrap_daemon_bin<COMMAND_RPC_GET_BLOCKS_FAST>("/getblocks.bin", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     std::list<std::pair<cryptonote::blobdata, std::list<cryptonote::blobdata> > > bs;
 
     if(!m_core.find_blockchain_supplement(req.start_height, req.block_ids, bs, res.current_height, res.start_height, COMMAND_RPC_GET_BLOCKS_FAST_MAX_COUNT))
@@ -283,8 +289,11 @@ namespace cryptonote
       PERF_TIMER(on_get_alt_blocks_hashes);
       if (should_use_bootstrap_daemon())
       {
-        return use_bootstrap_daemon<COMMAND_RPC_GET_ALT_BLOCKS_HASHES>("/get_alt_blocks_hashes", req, res);
+        bool r = use_bootstrap_daemon<COMMAND_RPC_GET_ALT_BLOCKS_HASHES>("/get_alt_blocks_hashes", req, res);
+        res.untrusted = true;
+        return r;
       }
+      res.untrusted = false;
       std::list<block> blks;
 
       if(!m_core.get_alternative_blocks(blks))
@@ -310,8 +319,11 @@ namespace cryptonote
     PERF_TIMER(on_get_blocks_by_height);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_bin<COMMAND_RPC_GET_BLOCKS_BY_HEIGHT>("/getblocks_by_height.bin", req, res);
+      bool r = use_bootstrap_daemon_bin<COMMAND_RPC_GET_BLOCKS_BY_HEIGHT>("/getblocks_by_height.bin", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     res.status = "Failed";
     res.blocks.clear();
     res.blocks.reserve(req.heights.size());
@@ -344,8 +356,11 @@ namespace cryptonote
     PERF_TIMER(on_get_hashes);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_bin<COMMAND_RPC_GET_HASHES_FAST>("/gethashes.bin", req, res);
+      bool r = use_bootstrap_daemon_bin<COMMAND_RPC_GET_HASHES_FAST>("/gethashes.bin", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     NOTIFY_RESPONSE_CHAIN_ENTRY::request resp;
 
     resp.start_height = req.start_height;
@@ -367,8 +382,11 @@ namespace cryptonote
     PERF_TIMER(on_get_random_outs);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_bin<COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS>("/getrandom_outs.bin", req, res);
+      bool r = use_bootstrap_daemon_bin<COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS>("/getrandom_outs.bin", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     res.status = "Failed";
 
     if (m_restricted)
@@ -410,8 +428,11 @@ namespace cryptonote
     PERF_TIMER(on_get_outs_bin);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_bin<COMMAND_RPC_GET_OUTPUTS_BIN>("/get_outs.bin", req, res);
+      bool r = use_bootstrap_daemon_bin<COMMAND_RPC_GET_OUTPUTS_BIN>("/get_outs.bin", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     res.status = "Failed";
 
     if (m_restricted)
@@ -437,8 +458,11 @@ namespace cryptonote
     PERF_TIMER(on_get_outs);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon<COMMAND_RPC_GET_OUTPUTS>("/get_outs", req, res);
+      bool r = use_bootstrap_daemon<COMMAND_RPC_GET_OUTPUTS>("/get_outs", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     res.status = "Failed";
 
     if (m_restricted)
@@ -479,8 +503,11 @@ namespace cryptonote
     PERF_TIMER(on_get_random_rct_outs);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_bin<COMMAND_RPC_GET_RANDOM_RCT_OUTPUTS>("/getrandom_rctouts.bin", req, res);
+      bool r = use_bootstrap_daemon_bin<COMMAND_RPC_GET_RANDOM_RCT_OUTPUTS>("/getrandom_rctouts.bin", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     res.status = "Failed";
     if(!m_core.get_random_rct_outs(req, res))
     {
@@ -507,8 +534,11 @@ namespace cryptonote
     PERF_TIMER(on_get_indexes);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_bin<COMMAND_RPC_GET_TX_GLOBAL_OUTPUTS_INDEXES>("/get_o_indexes.bin", req, res);
+      bool r = use_bootstrap_daemon_bin<COMMAND_RPC_GET_TX_GLOBAL_OUTPUTS_INDEXES>("/get_o_indexes.bin", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     bool r = m_core.get_tx_outputs_gindexs(req.txid, res.o_indexes);
     if(!r)
     {
@@ -525,8 +555,11 @@ namespace cryptonote
     PERF_TIMER(on_get_transactions);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon<COMMAND_RPC_GET_TRANSACTIONS>("/gettransactions", req, res);
+      bool r = use_bootstrap_daemon<COMMAND_RPC_GET_TRANSACTIONS>("/gettransactions", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     std::vector<crypto::hash> vh;
     for(const auto& tx_hex_str: req.txs_hashes)
     {
@@ -679,8 +712,11 @@ namespace cryptonote
     PERF_TIMER(on_is_key_image_spent);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon<COMMAND_RPC_IS_KEY_IMAGE_SPENT>("/is_key_image_spent", req, res);
+      bool r = use_bootstrap_daemon<COMMAND_RPC_IS_KEY_IMAGE_SPENT>("/is_key_image_spent", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     std::vector<crypto::key_image> key_images;
     for(const auto& ki_hex_str: req.key_images)
     {
@@ -746,8 +782,11 @@ namespace cryptonote
     PERF_TIMER(on_send_raw_tx);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon<COMMAND_RPC_SEND_RAW_TX>("/sendrawtransaction", req, res);
+      bool r = use_bootstrap_daemon<COMMAND_RPC_SEND_RAW_TX>("/sendrawtransaction", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     CHECK_CORE_READY();
 
     std::string tx_blob;
@@ -973,8 +1012,11 @@ namespace cryptonote
     PERF_TIMER(on_get_transaction_pool);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon<COMMAND_RPC_GET_TRANSACTION_POOL>("/get_transaction_pool", req, res);
+      bool r = use_bootstrap_daemon<COMMAND_RPC_GET_TRANSACTION_POOL>("/get_transaction_pool", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     m_core.get_pool_transactions_and_spent_keys_info(res.transactions, res.spent_key_images, !request_has_rpc_origin || !m_restricted);
     res.status = CORE_RPC_STATUS_OK;
     return true;
@@ -985,8 +1027,11 @@ namespace cryptonote
     PERF_TIMER(on_get_transaction_pool_hashes);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon<COMMAND_RPC_GET_TRANSACTION_POOL_HASHES>("/get_transaction_pool_hashes.bin", req, res);
+      bool r = use_bootstrap_daemon<COMMAND_RPC_GET_TRANSACTION_POOL_HASHES>("/get_transaction_pool_hashes.bin", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     m_core.get_pool_transaction_hashes(res.tx_hashes, !request_has_rpc_origin || !m_restricted);
     res.status = CORE_RPC_STATUS_OK;
     return true;
@@ -997,8 +1042,11 @@ namespace cryptonote
     PERF_TIMER(on_get_transaction_pool_stats);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon<COMMAND_RPC_GET_TRANSACTION_POOL_STATS>("/get_transaction_pool_stats", req, res);
+      bool r = use_bootstrap_daemon<COMMAND_RPC_GET_TRANSACTION_POOL_STATS>("/get_transaction_pool_stats", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     m_core.get_pool_transaction_stats(res.pool_stats, !request_has_rpc_origin || !m_restricted);
     res.status = CORE_RPC_STATUS_OK;
     return true;
@@ -1073,8 +1121,11 @@ namespace cryptonote
     PERF_TIMER(on_getblocktemplate);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_json<COMMAND_RPC_GETBLOCKTEMPLATE>("getblocktemplate", req, res);
+      bool r = use_bootstrap_daemon_json<COMMAND_RPC_GETBLOCKTEMPLATE>("getblocktemplate", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     if(!check_core_ready())
     {
       error_resp.code = CORE_RPC_ERROR_CODE_CORE_BUSY;
@@ -1292,8 +1343,11 @@ namespace cryptonote
     PERF_TIMER(on_get_last_block_header);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_json<COMMAND_RPC_GET_LAST_BLOCK_HEADER>("getlastblockheader", req, res);
+      bool r = use_bootstrap_daemon_json<COMMAND_RPC_GET_LAST_BLOCK_HEADER>("getlastblockheader", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     CHECK_CORE_READY();
     uint64_t last_block_height;
     crypto::hash last_block_hash;
@@ -1321,8 +1375,11 @@ namespace cryptonote
     PERF_TIMER(on_get_block_header_by_hash);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_json<COMMAND_RPC_GET_BLOCK_HEADER_BY_HASH>("getblockheaderbyhash", req, res);
+      bool r = use_bootstrap_daemon_json<COMMAND_RPC_GET_BLOCK_HEADER_BY_HASH>("getblockheaderbyhash", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     crypto::hash block_hash;
     bool hash_parsed = parse_hash256(req.hash, block_hash);
     if(!hash_parsed)
@@ -1362,8 +1419,11 @@ namespace cryptonote
     PERF_TIMER(on_get_block_headers_range);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_json<COMMAND_RPC_GET_BLOCK_HEADERS_RANGE>("getblockheadersrange", req, res);
+      bool r = use_bootstrap_daemon_json<COMMAND_RPC_GET_BLOCK_HEADERS_RANGE>("getblockheadersrange", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     const uint64_t bc_height = m_core.get_current_blockchain_height();
     if (req.start_height >= bc_height || req.end_height >= bc_height || req.start_height > req.end_height)
     {
@@ -1412,8 +1472,11 @@ namespace cryptonote
     PERF_TIMER(on_get_block_header_by_height);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_json<COMMAND_RPC_GET_BLOCK_HEADER_BY_HEIGHT>("getblockheaderbyheight", req, res);
+      bool r = use_bootstrap_daemon_json<COMMAND_RPC_GET_BLOCK_HEADER_BY_HEIGHT>("getblockheaderbyheight", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     if(m_core.get_current_blockchain_height() <= req.height)
     {
       error_resp.code = CORE_RPC_ERROR_CODE_TOO_BIG_HEIGHT;
@@ -1444,8 +1507,11 @@ namespace cryptonote
     PERF_TIMER(on_get_block);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_json<COMMAND_RPC_GET_BLOCK>("getblock", req, res);
+      bool r = use_bootstrap_daemon_json<COMMAND_RPC_GET_BLOCK>("getblock", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     crypto::hash block_hash;
     if (!req.hash.empty())
     {
@@ -1559,8 +1625,11 @@ namespace cryptonote
     PERF_TIMER(on_hard_fork_info);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_json<COMMAND_RPC_HARD_FORK_INFO>("hard_fork_info", req, res);
+      bool r = use_bootstrap_daemon_json<COMMAND_RPC_HARD_FORK_INFO>("hard_fork_info", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
 
     const Blockchain &blockchain = m_core.get_blockchain_storage();
     uint8_t version = req.version > 0 ? req.version : blockchain.get_next_hard_fork_version();
@@ -1685,8 +1754,11 @@ namespace cryptonote
     PERF_TIMER(on_get_output_histogram);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_json<COMMAND_RPC_GET_OUTPUT_HISTOGRAM>("get_output_histogram", req, res);
+      bool r = use_bootstrap_daemon_json<COMMAND_RPC_GET_OUTPUT_HISTOGRAM>("get_output_histogram", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
 
     std::map<uint64_t, std::tuple<uint64_t, uint64_t, uint64_t>> histogram;
     try
@@ -1716,8 +1788,11 @@ namespace cryptonote
     PERF_TIMER(on_get_version);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_json<COMMAND_RPC_GET_VERSION>("get_version", req, res);
+      bool r = use_bootstrap_daemon_json<COMMAND_RPC_GET_VERSION>("get_version", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     res.version = CORE_RPC_VERSION;
     res.status = CORE_RPC_STATUS_OK;
     return true;
@@ -1728,8 +1803,11 @@ namespace cryptonote
     PERF_TIMER(on_get_coinbase_tx_sum);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_json<COMMAND_RPC_GET_COINBASE_TX_SUM>("get_coinbase_tx_sum", req, res);
+      bool r = use_bootstrap_daemon_json<COMMAND_RPC_GET_COINBASE_TX_SUM>("get_coinbase_tx_sum", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     std::pair<uint64_t, uint64_t> amounts = m_core.get_coinbase_tx_sum(req.height, req.count);
     res.emission_amount = amounts.first;
     res.fee_amount = amounts.second;
@@ -1742,8 +1820,11 @@ namespace cryptonote
     PERF_TIMER(on_get_per_kb_fee_estimate);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_json<COMMAND_RPC_GET_PER_KB_FEE_ESTIMATE>("get_fee_estimate", req, res);
+      bool r = use_bootstrap_daemon_json<COMMAND_RPC_GET_PER_KB_FEE_ESTIMATE>("get_fee_estimate", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
     res.fee = m_core.get_blockchain_storage().get_dynamic_per_kb_fee_estimate(req.grace_blocks);
     res.status = CORE_RPC_STATUS_OK;
     return true;
@@ -1945,8 +2026,11 @@ namespace cryptonote
     PERF_TIMER(on_relay_tx);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_json<COMMAND_RPC_RELAY_TX>("relay_tx", req, res);
+      bool r = use_bootstrap_daemon_json<COMMAND_RPC_RELAY_TX>("relay_tx", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
 
     bool failed = false;
     res.status = "";
@@ -1995,8 +2079,11 @@ namespace cryptonote
     PERF_TIMER(on_sync_info);
     if (!no_bootstrap && should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_json<COMMAND_RPC_SYNC_INFO>("sync_info", req, res);
+      bool r = use_bootstrap_daemon_json<COMMAND_RPC_SYNC_INFO>("sync_info", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
 
     crypto::hash top_hash;
     m_core.get_blockchain_top(res.height, top_hash);
@@ -2026,8 +2113,11 @@ namespace cryptonote
     PERF_TIMER(on_get_txpool_backlog);
     if (should_use_bootstrap_daemon())
     {
-      return use_bootstrap_daemon_json<COMMAND_RPC_GET_TRANSACTION_POOL_BACKLOG>("get_txpool_backlog", req, res);
+      bool r = use_bootstrap_daemon_json<COMMAND_RPC_GET_TRANSACTION_POOL_BACKLOG>("get_txpool_backlog", req, res);
+      res.untrusted = true;
+      return r;
     }
+    res.untrusted = false;
 
     if (!m_core.get_txpool_backlog(res.backlog))
     {

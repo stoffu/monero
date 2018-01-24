@@ -65,10 +65,12 @@ namespace cryptonote
     {
       uint64_t 	 height;
       std::string status;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(height)
         KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -113,6 +115,7 @@ namespace cryptonote
       uint64_t    current_height;
       std::string status;
       std::vector<block_output_indices> output_indices;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(blocks)
@@ -120,6 +123,7 @@ namespace cryptonote
         KV_SERIALIZE(current_height)
         KV_SERIALIZE(status)
         KV_SERIALIZE(output_indices)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -138,10 +142,12 @@ namespace cryptonote
     {
       std::vector<block_complete_entry> blocks;
       std::string status;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(blocks)
         KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -158,10 +164,12 @@ namespace cryptonote
         {
             std::vector<std::string> blks_hashes;
             std::string status;
+            bool untrusted;
 
             BEGIN_KV_SERIALIZE_MAP()
                 KV_SERIALIZE(blks_hashes)
                 KV_SERIALIZE(status)
+                KV_SERIALIZE(untrusted)
             END_KV_SERIALIZE_MAP()
         };
     };
@@ -184,12 +192,14 @@ namespace cryptonote
       uint64_t    start_height;
       uint64_t    current_height;
       std::string status;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE_CONTAINER_POD_AS_BLOB(m_block_ids)
         KV_SERIALIZE(start_height)
         KV_SERIALIZE(current_height)
         KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -595,6 +605,7 @@ namespace cryptonote
       // new style
       std::vector<entry> txs;
       std::string status;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(txs_as_hex)
@@ -602,6 +613,7 @@ namespace cryptonote
         KV_SERIALIZE(txs)
         KV_SERIALIZE(missed_tx)
         KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -629,10 +641,12 @@ namespace cryptonote
     {
       std::vector<int> spent_status;
       std::string status;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(spent_status)
         KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -653,9 +667,11 @@ namespace cryptonote
     {
       std::vector<uint64_t> o_indexes;
       std::string status;
+      bool untrusted;
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(o_indexes)
         KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -695,9 +711,11 @@ namespace cryptonote
     {
       std::vector<outs_for_amount> outs;
       std::string status;
+      bool untrusted;
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(outs)
         KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -745,10 +763,12 @@ namespace cryptonote
     {
       std::vector<outkey> outs;
       std::string status;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(outs)
         KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -785,10 +805,12 @@ namespace cryptonote
     {
       std::vector<outkey> outs;
       std::string status;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(outs)
         KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -817,9 +839,11 @@ namespace cryptonote
     {
       std::list<out_entry> outs;
       std::string status;
+      bool untrusted;
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE_CONTAINER_POD_AS_BLOB(outs)
         KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -854,6 +878,7 @@ namespace cryptonote
       bool overspend;
       bool fee_too_low;
       bool not_rct;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(status)
@@ -867,6 +892,7 @@ namespace cryptonote
         KV_SERIALIZE(overspend)
         KV_SERIALIZE(fee_too_low)
         KV_SERIALIZE(not_rct)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -1084,6 +1110,7 @@ namespace cryptonote
       blobdata blocktemplate_blob;
       blobdata blockhashing_blob;
       std::string status;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(difficulty)
@@ -1094,6 +1121,7 @@ namespace cryptonote
         KV_SERIALIZE(blocktemplate_blob)
         KV_SERIALIZE(blockhashing_blob)
         KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -1157,10 +1185,12 @@ namespace cryptonote
     {
       std::string status;
       block_header_response block_header;
+      bool untrusted;
       
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(block_header)
         KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -1181,10 +1211,12 @@ namespace cryptonote
     {
       std::string status;
       block_header_response block_header;
+      bool untrusted;
       
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(block_header)
         KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -1205,10 +1237,12 @@ namespace cryptonote
     {
       std::string status;
       block_header_response block_header;
+      bool untrusted;
       
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(block_header)
         KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -1235,6 +1269,7 @@ namespace cryptonote
       std::vector<std::string> tx_hashes;
       std::string blob;
       std::string json;
+      bool untrusted;
       
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(block_header)
@@ -1243,6 +1278,7 @@ namespace cryptonote
         KV_SERIALIZE(status)
         KV_SERIALIZE(blob)
         KV_SERIALIZE(json)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -1419,11 +1455,13 @@ namespace cryptonote
       std::string status;
       std::vector<tx_info> transactions;
       std::vector<spent_key_image_info> spent_key_images;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(status)
         KV_SERIALIZE(transactions)
         KV_SERIALIZE(spent_key_images)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -1440,10 +1478,12 @@ namespace cryptonote
     {
       std::string status;
       std::vector<crypto::hash> tx_hashes;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(status)
         KV_SERIALIZE_CONTAINER_POD_AS_BLOB(tx_hashes)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -1467,10 +1507,12 @@ namespace cryptonote
     {
       std::string status;
       std::vector<tx_backlog_entry> backlog;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(status)
         KV_SERIALIZE_CONTAINER_POD_AS_BLOB(backlog)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -1531,10 +1573,12 @@ namespace cryptonote
     {
       std::string status;
       txpool_stats pool_stats;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(status)
         KV_SERIALIZE(pool_stats)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -1577,10 +1621,12 @@ namespace cryptonote
     {
       std::string status;
       std::vector<block_header_response> headers;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(status)
         KV_SERIALIZE(headers)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -1748,6 +1794,7 @@ namespace cryptonote
       uint32_t state;
       uint64_t earliest_height;
       std::string status;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(version)
@@ -1759,6 +1806,7 @@ namespace cryptonote
         KV_SERIALIZE(state)
         KV_SERIALIZE(earliest_height)
         KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -1895,10 +1943,12 @@ namespace cryptonote
     {
       std::string status;
       std::vector<entry> histogram;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(status)
         KV_SERIALIZE(histogram)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -1915,10 +1965,12 @@ namespace cryptonote
     {
       std::string status;
       uint32_t version;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(status)
         KV_SERIALIZE(version)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -1941,11 +1993,13 @@ namespace cryptonote
       std::string status;
       uint64_t emission_amount;
       uint64_t fee_amount;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(status)
         KV_SERIALIZE(emission_amount)
         KV_SERIALIZE(fee_amount)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -1965,10 +2019,12 @@ namespace cryptonote
     {
       std::string status;
       uint64_t fee;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(status)
         KV_SERIALIZE(fee)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -2057,9 +2113,11 @@ namespace cryptonote
     struct response
     {
       std::string status;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
@@ -2109,6 +2167,7 @@ namespace cryptonote
       uint64_t target_height;
       std::list<peer> peers;
       std::list<span> spans;
+      bool untrusted;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(status)
@@ -2116,6 +2175,7 @@ namespace cryptonote
         KV_SERIALIZE(target_height)
         KV_SERIALIZE(peers)
         KV_SERIALIZE(spans)
+        KV_SERIALIZE(untrusted)
       END_KV_SERIALIZE_MAP()
     };
   };
