@@ -1229,6 +1229,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::should_use_bootstrap_daemon()
   {
+    boost::lock_guard<boost::mutex> lock(m_bootstrap_daemon_mutex);
     if (m_bootstrap_daemon_address.empty())
       return false;
     if (!m_should_use_bootstrap_daemon)
