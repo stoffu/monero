@@ -1258,10 +1258,15 @@ namespace cryptonote
       crypto::hash top_hash;
       m_core.get_blockchain_top(top_height, top_hash);
       ++top_height; // turn top block height into blockchain height
-      uint64_t target_height = m_core.get_target_blockchain_height();
 
-      m_should_use_bootstrap_daemon = target_height ? top_height < target_height : true;
-      MINFO((m_should_use_bootstrap_daemon ? "Using" : "Not using") << " the bootstrap daemon (top height: " << top_height << ", target height: " << target_height << ")");
+      // query bootstrap daemon's height
+      cryptonote::COMMAND_RPC_GET_HEIGHT::request getheight_req;
+      cryptonote::COMMAND_RPC_GET_HEIGHT::response getheight_res;
+      bool ok = epee::net_utils::invoke_http_json("/getheight", getheight_req, getheight_res, m_http_client);
+      ok = ok && getheight_res.status == CORE_RPC_STATUS_OK;
+
+      m_should_use_bootstrap_daemon = ok && top_height + 10 < getheight_res.height;
+      MINFO((m_should_use_bootstrap_daemon ? "Using" : "Not using") << " the bootstrap daemon (our height: " << top_height << ", bootstrap daemon's height: " << getheight_res.height << ")");
     }
     if (!m_should_use_bootstrap_daemon)
       return false;
