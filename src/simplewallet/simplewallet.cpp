@@ -1609,8 +1609,9 @@ simple_wallet::simple_wallet()
                            tr("Send all unlocked outputs below the threshold to an address."));
   m_cmd_binder.set_handler("sweep_single",
                            boost::bind(&simple_wallet::sweep_single, this, _1),
-                           tr("sweep_single [<priority>] [<ring_size>] <key_image> <address> [<payment_id>]"),
-                           tr("Send a single output of the given key image to an address without change."));
+                           tr("sweep_single [<priority>] [<ring_size>] <key_image1> [<key_image2> ...] <address> [<payment_id>]"),
+                           // tr("sweep_single [<priority>] [<ring_size>] <key_image1> [<key_image2>] <address> [<payment_id>]"),
+                           tr("Send a single output of the given key image(s) to an address without change."));
   m_cmd_binder.set_handler("donate",
                            boost::bind(&simple_wallet::donate, this, _1),
                            tr("donate [index=<N1>[,<N2>,...]] [<priority>] [<ring_size>] <amount> [<payment_id>]"),
@@ -4401,7 +4402,7 @@ bool simple_wallet::sweep_single(const std::vector<std::string> &args_)
 
   std::vector<uint8_t> extra;
   bool payment_id_seen = false;
-  if (local_args.size() == 3)
+  if (local_args.size() > 0)
   {
     crypto::hash payment_id;
     crypto::hash8 payment_id8;
@@ -4409,44 +4410,48 @@ bool simple_wallet::sweep_single(const std::vector<std::string> &args_)
     if (tools::wallet2::parse_long_payment_id(local_args.back(), payment_id))
     {
       set_payment_id_to_tx_extra_nonce(extra_nonce, payment_id);
+      payment_id_seen = true;
     }
     else if(tools::wallet2::parse_short_payment_id(local_args.back(), payment_id8))
     {
       set_encrypted_payment_id_to_tx_extra_nonce(extra_nonce, payment_id8);
+      payment_id_seen = true;
     }
-    else
+    if (payment_id_seen)
     {
-      fail_msg_writer() << tr("failed to parse Payment ID");
-      return true;
+      local_args.pop_back();
+      if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
+      {
+        fail_msg_writer() << tr("failed to set up payment id, though it was decoded correctly");
+        return true;
+      }
     }
-
-    if (!add_extra_nonce_to_tx_extra(extra, extra_nonce))
-    {
-      fail_msg_writer() << tr("failed to set up payment id, though it was decoded correctly");
-      return true;
-    }
-
-    local_args.pop_back();
-    payment_id_seen = true;
   }
 
-  if (local_args.size() != 2)
+  if (local_args.size() < 2)
+  // if (local_args.size() != 2 && local_args.size() != 3)
   {
-    fail_msg_writer() << tr("usage: sweep_single [<priority>] [<ring_size>] <key_image> <address> [<payment_id>]");
+    fail_msg_writer() << tr("usage: sweep_single [<priority>] [<ring_size>] <key_image1> [<key_image2> ...] <address> [<payment_id>]");
+    // fail_msg_writer() << tr("usage: sweep_single [<priority>] [<ring_size>] <key_image1> [<key_image2>] <address> [<payment_id>]");
     return true;
   }
 
-  crypto::key_image ki;
-  if (!epee::string_tools::hex_to_pod(local_args[0], ki))
+  std::unordered_set<crypto::key_image> key_images;
+  for (size_t i = 0; i < local_args.size() - 1; ++i)
   {
-    fail_msg_writer() << tr("failed to parse key image");
-    return true;
+    crypto::key_image ki;
+    if (!epee::string_tools::hex_to_pod(local_args[i], ki))
+    {
+      fail_msg_writer() << tr("failed to parse key image: ") << local_args[i];
+      return true;
+    }
+    key_images.insert(ki);
   }
 
   cryptonote::address_parse_info info;
-  if (!cryptonote::get_account_address_from_str_or_url(info, m_wallet->testnet(), local_args[1], oa_prompter))
+  if (!cryptonote::get_account_address_from_str_or_url(info, m_wallet->testnet(), local_args.back(), oa_prompter))
   {
-    fail_msg_writer() << tr("failed to parse address");
+    fail_msg_writer() << tr("failed to parse address: ") << local_args.back();
     return true;
   }
 
@@ -4454,7 +4459,7 @@ bool simple_wallet::sweep_single(const std::vector<std::string> &args_)
   {
     if (payment_id_seen)
     {
-      fail_msg_writer() << tr("a single transaction cannot use more than one payment id: ") << local_args[0];
+      fail_msg_writer() << tr("a single transaction cannot use more than one payment id");
       return true;
     }
 
@@ -4487,7 +4492,7 @@ bool simple_wallet::sweep_single(const std::vector<std::string> &args_)
   try
   {
     // figure out what tx will be necessary
-    auto ptx_vector = m_wallet->create_transactions_single(ki, info.address, info.is_subaddress, fake_outs_count, 0 /* unlock_time */, priority, extra, m_trusted_daemon);
+    auto ptx_vector = m_wallet->create_transactions_single(key_images, info.address, info.is_subaddress, fake_outs_count, 0 /* unlock_time */, priority, extra, m_trusted_daemon);
 
     if (ptx_vector.empty())
     {
@@ -4499,15 +4504,17 @@ bool simple_wallet::sweep_single(const std::vector<std::string> &args_)
       fail_msg_writer() << tr("Multiple transactions are created, which is not supposed to happen");
       return true;
     }
-    if (ptx_vector[0].selected_transfers.size() != 1)
+    if (ptx_vector[0].selected_transfers.size() != key_images.size())
     {
-      fail_msg_writer() << tr("The transaction uses multiple or no inputs, which is not supposed to happen");
+      fail_msg_writer() << tr("The number of used outputs doesn't agree with the number of given key images");
       return true;
     }
 
     // give user total and fee, and prompt to confirm
     uint64_t total_fee = ptx_vector[0].fee;
-    uint64_t total_sent = m_wallet->get_transfer_details(ptx_vector[0].selected_transfers.front()).amount();
+    uint64_t total_sent = 0;
+    for (auto i: ptx_vector[0].selected_transfers)
+      total_sent += m_wallet->get_transfer_details(i).amount();
     std::ostringstream prompt;
     if (!print_ring_members(ptx_vector, prompt))
       return true;
