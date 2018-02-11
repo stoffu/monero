@@ -828,6 +828,9 @@ namespace tools
       if(ver < 24)
         return;
       a & m_ring_history_saved;
+      if(ver < 25)
+        return;
+      a & m_rpc_client_secret_key;
     }
 
     /*!
@@ -885,6 +888,14 @@ namespace tools
     void segregation_height(uint64_t height) { m_segregation_height = height; }
     bool confirm_non_default_ring_size() const { return m_confirm_non_default_ring_size; }
     void confirm_non_default_ring_size(bool always) { m_confirm_non_default_ring_size = always; }
+    bool persistent_rpc_client_id() const { return m_persistent_rpc_client_id; }
+    void persistent_rpc_client_id(bool persistent) { m_persistent_rpc_client_id = persistent; }
+    void auto_mine_for_rpc_payment_threshold(float threshold) { m_auto_mine_for_rpc_payment_threshold = threshold; }
+    float auto_mine_for_rpc_payment_threshold() const { return m_auto_mine_for_rpc_payment_threshold; }
+    crypto::secret_key get_rpc_client_secret_key() const { return m_rpc_client_secret_key; }
+    void set_rpc_client_secret_key(const crypto::secret_key &key) { m_rpc_client_secret_key = key; m_node_rpc_proxy.set_client_secret_key(key); }
+    uint64_t credits_target() const { return m_credits_target; }
+    void credits_target(uint64_t threshold) { m_credits_target = threshold; }
 
     bool get_tx_key(const crypto::hash &txid, crypto::secret_key &tx_key, std::vector<crypto::secret_key> &additional_tx_keys) const;
     void check_tx_key(const crypto::hash &txid, const crypto::secret_key &tx_key, const std::vector<crypto::secret_key> &additional_tx_keys, const cryptonote::account_public_address &address, uint64_t &received, bool &in_pool, uint64_t &confirmations);
@@ -925,15 +936,15 @@ namespace tools
     size_t get_num_transfer_details() const { return m_transfers.size(); }
     const transfer_details &get_transfer_details(size_t idx) const;
 
-    void get_hard_fork_info(uint8_t version, uint64_t &earliest_height) const;
-    bool use_fork_rules(uint8_t version, int64_t early_blocks = 0) const;
-    int get_fee_algorithm() const;
+    void get_hard_fork_info(uint8_t version, uint64_t &earliest_height);
+    bool use_fork_rules(uint8_t version, int64_t early_blocks = 0);
+    int get_fee_algorithm();
 
     std::string get_wallet_file() const;
     std::string get_keys_file() const;
     std::string get_daemon_address() const;
     const boost::optional<epee::net_utils::http::login>& get_daemon_login() const { return m_daemon_login; }
-    uint64_t get_daemon_blockchain_height(std::string& err) const;
+    uint64_t get_daemon_blockchain_height(std::string& err);
     uint64_t get_daemon_blockchain_target_height(std::string& err);
    /*!
     * \brief Calculates the approximate blockchain height from current date/time.
@@ -1019,14 +1030,23 @@ namespace tools
 
     uint64_t get_blockchain_height_by_date(uint16_t year, uint8_t month, uint8_t day);    // 1<=month<=12, 1<=day<=31
 
-    bool is_synced() const;
+    bool is_synced();
 
     std::vector<std::pair<uint64_t, uint64_t>> estimate_backlog(const std::vector<std::pair<double, double>> &fee_levels);
     std::vector<std::pair<uint64_t, uint64_t>> estimate_backlog(uint64_t min_blob_size, uint64_t max_blob_size, const std::vector<uint64_t> &fees);
+    bool get_rpc_payment_info(bool mining, bool &payments, uint64_t &credits, uint64_t &diff, uint64_t &credits_per_hash_found, cryptonote::blobdata &hashing_blob);
+    bool daemon_requires_payment();
+    bool make_rpc_payment(uint32_t payment, uint64_t &credits);
+    bool search_for_rpc_payment(uint64_t credits_target, const std::function<bool(uint64_t, uint64_t)> &startfunc, const std::function<bool(void)> &contfunc, const std::function<bool(uint64_t)> &foundfunc = NULL);
+    template<typename T> void handle_payment_changes(const T &res, std::true_type) {
+      if (res.status == CORE_RPC_STATUS_OK || res.status == CORE_RPC_STATUS_PAYMENT_REQUIRED)
+        m_credits = res.credits;
+    }
+    template<typename T> void handle_payment_changes(const T &res, std::false_type) {}
 
-    uint64_t get_fee_multiplier(uint32_t priority, int fee_algorithm = -1) const;
-    uint64_t get_per_kb_fee() const;
-    uint64_t adjust_mixin(uint64_t mixin) const;
+    uint64_t get_fee_multiplier(uint32_t priority, int fee_algorithm = -1);
+    uint64_t get_per_kb_fee();
+    uint64_t adjust_mixin(uint64_t mixin);
     uint32_t adjust_priority(uint32_t priority);
 
     // Light wallet specific functions
@@ -1102,6 +1122,8 @@ namespace tools
     bool unblackball_output(const crypto::public_key &output);
     bool is_output_blackballed(const crypto::public_key &output) const;
 
+    uint64_t credits() const { return m_credits; }
+
   private:
     /*!
      * \brief  Stores wallet information to wallet file.
@@ -1139,9 +1161,9 @@ namespace tools
     crypto::hash get_payment_id(const pending_tx &ptx) const;
     void check_acc_out_precomp(const cryptonote::tx_out &o, const crypto::key_derivation &derivation, const std::vector<crypto::key_derivation> &additional_derivations, size_t i, tx_scan_info_t &tx_scan_info) const;
     void parse_block_round(const cryptonote::blobdata &blob, cryptonote::block &bl, crypto::hash &bl_id, bool &error) const;
-    uint64_t get_upper_transaction_size_limit() const;
+    uint64_t get_upper_transaction_size_limit();
     std::vector<uint64_t> get_unspent_amounts_vector() const;
-    uint64_t get_dynamic_per_kb_fee_estimate() const;
+    uint64_t get_dynamic_per_kb_fee_estimate();
     float get_output_relatedness(const transfer_details &td0, const transfer_details &td1) const;
     std::vector<size_t> pick_preferred_rct_inputs(uint64_t needed_money, uint32_t subaddr_account, const std::set<uint32_t> &subaddr_indices) const;
     void set_spent(size_t idx, uint64_t height);
@@ -1166,6 +1188,8 @@ namespace tools
     bool get_output_distribution(uint64_t &start_height, std::vector<uint64_t> &distribution);
 
     uint64_t get_segregation_fork_height() const;
+
+    std::string get_client_signature() const;
 
     cryptonote::account_base m_account;
     boost::optional<epee::net_utils::http::login> m_daemon_login;
@@ -1235,10 +1259,15 @@ namespace tools
     bool m_segregate_pre_fork_outputs;
     bool m_key_reuse_mitigation2;
     uint64_t m_segregation_height;
+    bool m_persistent_rpc_client_id;
+    float m_auto_mine_for_rpc_payment_threshold;
     bool m_is_initialized;
     NodeRPCProxy m_node_rpc_proxy;
     std::unordered_set<crypto::hash> m_scanned_pool_txs[2];
     size_t m_subaddress_lookahead_major, m_subaddress_lookahead_minor;
+    crypto::secret_key m_rpc_client_secret_key;
+    uint64_t m_credits;
+    uint64_t m_credits_target;
 
     // Light wallet
     bool m_light_wallet; /* sends view key to daemon for scanning */
@@ -1259,7 +1288,7 @@ namespace tools
     std::unique_ptr<ringdb> m_ringdb;
   };
 }
-BOOST_CLASS_VERSION(tools::wallet2, 24)
+BOOST_CLASS_VERSION(tools::wallet2, 25)
 BOOST_CLASS_VERSION(tools::wallet2::transfer_details, 9)
 BOOST_CLASS_VERSION(tools::wallet2::multisig_info, 1)
 BOOST_CLASS_VERSION(tools::wallet2::multisig_info::LR, 0)

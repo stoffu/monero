@@ -38,6 +38,7 @@ using namespace epee;
 #include "common/download.h"
 #include "common/util.h"
 #include "common/perf_timer.h"
+#include "common/int-util.h"
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "cryptonote_basic/account.h"
 #include "cryptonote_basic/cryptonote_basic_impl.h"
@@ -45,6 +46,7 @@ using namespace epee;
 #include "storages/http_abstract_invoke.h"
 #include "crypto/hash.h"
 #include "rpc/rpc_args.h"
+#include "rpc/rpc_payment_signature.h"
 #include "core_rpc_server_error_codes.h"
 #include "p2p/net_node.h"
 #include "version.h"
@@ -55,8 +57,60 @@ using namespace epee;
 #define MAX_RESTRICTED_FAKE_OUTS_COUNT 40
 #define MAX_RESTRICTED_GLOBAL_FAKE_OUTS_COUNT 5000
 
+#define DEFAULT_PAYMENT_DIFFICULTY 1000
+#define DEFAULT_PAYMENT_CREDITS_PER_HASH 100
+
+#define COST_PER_BLOCK 0.1
+#define COST_PER_TX_RELAY 100
+#define COST_PER_OUT 1
+#define COST_PER_OUTPUT_INDEXES 1
+#define COST_PER_TX 0.5
+#define COST_PER_KEY_IMAGE 0.01
+#define COST_PER_HASH 0.01
+#define COST_PER_TX_POOL_STATS 1
+#define COST_PER_BLOCK_HEADER 0.25
+#define COST_PER_GET_INFO 1
+#define COST_PER_OUTPUT_HISTOGRAM 100000
+#define COST_PER_OUTPUT_DISTRIBUTION_0 20
+#define COST_PER_OUTPUT_DISTRIBUTION 100000
+#define COST_PER_COINBASE_TX_SUM 10000000
+#define COST_PER_BLOCK_HASH 0.01
+#define COST_PER_FEE_ESTIMATE 1
+#define COST_PER_SYNC_INFO 2
+
+#define RPC_TRACKER(rpc) \
+  RPCTracker tracker(#rpc)
+
 namespace
 {
+  class RPCTracker
+  {
+  public:
+    RPCTracker(const char *rpc): rpc(rpc), timer(rpc, 1000, tools::performance_timer_log_level) {
+    }
+    ~RPCTracker() {
+      boost::unique_lock<boost::mutex> lock(mutex);
+      auto &e = tracker[rpc];
+      std::get<0>(e)++;
+      std::get<1>(e) = timer.value();
+    }
+    void pay(uint64_t amount) {
+      boost::unique_lock<boost::mutex> lock(mutex);
+      auto &e = tracker[rpc];
+      std::get<2>(e) += amount;
+    }
+    const std::string &rpc_name() const { return rpc; }
+    static void clear() { boost::unique_lock<boost::mutex> lock(mutex); tracker.clear(); }
+    static std::unordered_map<std::string, std::tuple<uint64_t, uint64_t, uint64_t>> data() { boost::unique_lock<boost::mutex> lock(mutex); return tracker; }
+  private:
+    std::string rpc;
+    tools::PerformanceTimer timer;
+    static boost::mutex mutex;
+    static std::unordered_map<std::string, std::tuple<uint64_t, uint64_t, uint64_t>> tracker;
+  };
+  boost::mutex RPCTracker::mutex;
+  std::unordered_map<std::string, std::tuple<uint64_t, uint64_t, uint64_t>> RPCTracker::tracker;
+
   void add_reason(std::string &reasons, const char *reason)
   {
     if (!reasons.empty())
@@ -68,6 +122,10 @@ namespace
 namespace cryptonote
 {
 
+  std::string core_rpc_server::get_client_id_signature() const
+  {
+    return cryptonote::make_rpc_payment_signature(m_local_client);
+  }
   //-----------------------------------------------------------------------------------
   void core_rpc_server::init_options(boost::program_options::options_description& desc)
   {
@@ -76,6 +134,9 @@ namespace cryptonote
     command_line::add_arg(desc, arg_restricted_rpc);
     command_line::add_arg(desc, arg_bootstrap_daemon_address);
     command_line::add_arg(desc, arg_bootstrap_daemon_login);
+    command_line::add_arg(desc, arg_rpc_payment_address);
+    command_line::add_arg(desc, arg_rpc_payment_difficulty);
+    command_line::add_arg(desc, arg_rpc_payment_credits);
     cryptonote::rpc_args::init_options(desc);
   }
   //------------------------------------------------------------------------------------------------------------------------------
@@ -85,7 +146,14 @@ namespace cryptonote
     )
     : m_core(cr)
     , m_p2p(p2p)
-  {}
+  {
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
+  core_rpc_server::~core_rpc_server()
+  {
+    if (m_rpc_payment)
+      m_rpc_payment->store();
+  }
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::init(
       const boost::program_options::variables_map& vm
@@ -97,6 +165,33 @@ namespace cryptonote
     m_restricted = restricted;
     m_nettype = nettype;
     m_net_server.set_threads_prefix("RPC");
+
+    std::string address = command_line::get_arg(vm, arg_rpc_payment_address);
+    if (!address.empty())
+    {
+      cryptonote::address_parse_info info;
+      if (!get_account_address_from_str(info, m_nettype, address))
+      {
+        MERROR("Invalid payment address: " << address);
+        return false;
+      }
+      if (info.is_subaddress)
+      {
+        MERROR("Payment address may not be a subaddress: " << address);
+        return false;
+      }
+      uint64_t diff = command_line::get_arg(vm, arg_rpc_payment_difficulty);
+      uint64_t credits = command_line::get_arg(vm, arg_rpc_payment_credits);
+      if (diff == 0 || credits == 0)
+      {
+        MERROR("Payments difficulty and/or payments credits are 0, but a payment address was given");
+        return false;
+      }
+      m_rpc_payment.reset(new rpc_payment(info.address, diff, credits));
+      m_rpc_payment->load(command_line::get_arg(vm, cryptonote::arg_data_dir));
+    }
+
+    m_local_client = rct::rct2sk(rct::skGen());
 
     auto rpc_config = cryptonote::rpc_args::process(vm);
     if (!rpc_config)
@@ -137,6 +232,42 @@ namespace cryptonote
     );
   }
   //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::check_payment(const std::string &client_message, uint64_t payment, const std::string &rpc, bool same_ts, std::string &message, uint64_t &credits)
+  {
+    if (m_rpc_payment == NULL)
+      return true;
+    crypto::public_key client;
+    uint64_t ts;
+#ifndef NDEBUG
+    if (m_nettype == TESTNET && client_message == "debug")
+    {
+      credits = 0;
+      return true;
+    }
+#endif
+    if (!cryptonote::verify_rpc_payment_signature(client_message, client, ts))
+    {
+      credits = 0;
+      message = "Client signature does not verify";
+      return false;
+    }
+    crypto::public_key local_client;
+    crypto::secret_key_to_public_key(m_local_client, local_client);
+    if (client == local_client)
+    {
+      credits = 0;
+      return true;
+    }
+    if (!m_rpc_payment->pay(client, ts, payment, rpc, same_ts, credits))
+    {
+      message = CORE_RPC_STATUS_PAYMENT_REQUIRED;
+      return false;
+    }
+    return true;
+  }
+#define CHECK_PAYMENT(req, res, payment) do { uint64_t P = payment; if (P > 0 && !check_payment(req.client, P, tracker.rpc_name(), false, res.status, res.credits)){return true;} tracker.pay(P); } while(0)
+#define CHECK_PAYMENT_MIN1(req, res, payment, same_ts) do { uint64_t P = payment; if (P == 0) P = 1; if(!check_payment(req.client, P, tracker.rpc_name(), same_ts, res.status, res.credits)){return true;} tracker.pay(P); } while(0)
+  //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::check_core_ready()
   {
     if(!m_p2p.get_payload_object().is_synchronized())
@@ -150,7 +281,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_height(const COMMAND_RPC_GET_HEIGHT::request& req, COMMAND_RPC_GET_HEIGHT::response& res)
   {
-    PERF_TIMER(on_get_height);
+    RPC_TRACKER(get_height);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_HEIGHT>(invoke_http_mode::JON, "/getheight", req, res, r))
       return r;
@@ -162,7 +293,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_info(const COMMAND_RPC_GET_INFO::request& req, COMMAND_RPC_GET_INFO::response& res)
   {
-    PERF_TIMER(on_get_info);
+    RPC_TRACKER(get_info);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_INFO>(invoke_http_mode::JON, "/getinfo", req, res, r))
     {
@@ -173,6 +304,8 @@ namespace cryptonote
       res.was_bootstrap_ever_used = true;
       return r;
     }
+
+    CHECK_PAYMENT_MIN1(req, res, COST_PER_GET_INFO, false);
 
     crypto::hash top_hash;
     m_core.get_blockchain_top(res.height, top_hash);
@@ -220,12 +353,14 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_blocks(const COMMAND_RPC_GET_BLOCKS_FAST::request& req, COMMAND_RPC_GET_BLOCKS_FAST::response& res)
   {
-    PERF_TIMER(on_get_blocks);
+    RPC_TRACKER(get_blocks);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_BLOCKS_FAST>(invoke_http_mode::BIN, "/getblocks.bin", req, res, r))
       return r;
 
     std::list<std::pair<cryptonote::blobdata, std::list<cryptonote::blobdata> > > bs;
+
+    CHECK_PAYMENT(req, res, 1);
 
     // quick check for noop
     if (!req.block_ids.empty())
@@ -240,7 +375,21 @@ namespace cryptonote
       }
     }
 
-    if(!m_core.find_blockchain_supplement(req.start_height, req.block_ids, bs, res.current_height, res.start_height, req.prune, COMMAND_RPC_GET_BLOCKS_FAST_MAX_COUNT))
+    size_t max_blocks = COMMAND_RPC_GET_BLOCKS_FAST_MAX_COUNT;
+    if (m_rpc_payment)
+    {
+      max_blocks = res.credits / COST_PER_BLOCK;
+      if (max_blocks > COMMAND_RPC_GET_BLOCKS_FAST_MAX_COUNT)
+        max_blocks = COMMAND_RPC_GET_BLOCKS_FAST_MAX_COUNT;
+      if (max_blocks == 0)
+      {
+        res.status = CORE_RPC_STATUS_PAYMENT_REQUIRED;
+        return false;
+      }
+    }
+    CHECK_PAYMENT_MIN1(req, res, max_blocks * COST_PER_BLOCK, true);
+
+    if(!m_core.find_blockchain_supplement(req.start_height, req.block_ids, bs, res.current_height, res.start_height, req.prune, max_blocks))
     {
       res.status = "Failed";
       return false;
@@ -293,7 +442,7 @@ namespace cryptonote
   }
     bool core_rpc_server::on_get_alt_blocks_hashes(const COMMAND_RPC_GET_ALT_BLOCKS_HASHES::request& req, COMMAND_RPC_GET_ALT_BLOCKS_HASHES::response& res)
     {
-      PERF_TIMER(on_get_alt_blocks_hashes);
+      RPC_TRACKER(get_alt_blocks_hashes);
       bool r;
       if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_ALT_BLOCKS_HASHES>(invoke_http_mode::JON, "/get_alt_blocks_hashes", req, res, r))
         return r;
@@ -320,7 +469,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_blocks_by_height(const COMMAND_RPC_GET_BLOCKS_BY_HEIGHT::request& req, COMMAND_RPC_GET_BLOCKS_BY_HEIGHT::response& res)
   {
-    PERF_TIMER(on_get_blocks_by_height);
+    RPC_TRACKER(get_blocks_by_height);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_BLOCKS_BY_HEIGHT>(invoke_http_mode::BIN, "/getblocks_by_height.bin", req, res, r))
       return r;
@@ -328,6 +477,7 @@ namespace cryptonote
     res.status = "Failed";
     res.blocks.clear();
     res.blocks.reserve(req.heights.size());
+    CHECK_PAYMENT_MIN1(req, res, req.heights.size() * COST_PER_BLOCK, false);
     for (uint64_t height : req.heights)
     {
       block blk;
@@ -354,10 +504,12 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_hashes(const COMMAND_RPC_GET_HASHES_FAST::request& req, COMMAND_RPC_GET_HASHES_FAST::response& res)
   {
-    PERF_TIMER(on_get_hashes);
+    RPC_TRACKER(get_hashes);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_HASHES_FAST>(invoke_http_mode::BIN, "/gethashes.bin", req, res, r))
       return r;
+
+    CHECK_PAYMENT(req, res, 1);
 
     NOTIFY_RESPONSE_CHAIN_ENTRY::request resp;
 
@@ -367,6 +519,9 @@ namespace cryptonote
       res.status = "Failed";
       return false;
     }
+
+    CHECK_PAYMENT_MIN1(req, res, req.block_ids.size() * COST_PER_BLOCK_HASH, true);
+
     res.current_height = resp.total_height;
     res.start_height = resp.start_height;
     res.m_block_ids = std::move(resp.m_block_ids);
@@ -377,10 +532,12 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_random_outs(const COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::request& req, COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::response& res)
   {
-    PERF_TIMER(on_get_random_outs);
+    RPC_TRACKER(get_random_outs);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS>(invoke_http_mode::BIN, "/getrandom_outs.bin", req, res, r))
       return r;
+
+    CHECK_PAYMENT_MIN1(req, res, req.amounts.size() * req.outs_count * COST_PER_OUT, false);
 
     res.status = "Failed";
 
@@ -420,10 +577,12 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_outs_bin(const COMMAND_RPC_GET_OUTPUTS_BIN::request& req, COMMAND_RPC_GET_OUTPUTS_BIN::response& res)
   {
-    PERF_TIMER(on_get_outs_bin);
+    RPC_TRACKER(get_outs_bin);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_OUTPUTS_BIN>(invoke_http_mode::BIN, "/get_outs.bin", req, res, r))
       return r;
+
+    CHECK_PAYMENT_MIN1(req, res, req.outputs.size() * COST_PER_OUT, false);
 
     res.status = "Failed";
 
@@ -447,10 +606,12 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_outs(const COMMAND_RPC_GET_OUTPUTS::request& req, COMMAND_RPC_GET_OUTPUTS::response& res)
   {
-    PERF_TIMER(on_get_outs);
+    RPC_TRACKER(get_outs);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_OUTPUTS>(invoke_http_mode::JON, "/get_outs", req, res, r))
       return r;
+
+    CHECK_PAYMENT_MIN1(req, res, req.outputs.size() * COST_PER_OUT, false);
 
     res.status = "Failed";
 
@@ -489,10 +650,12 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_random_rct_outs(const COMMAND_RPC_GET_RANDOM_RCT_OUTPUTS::request& req, COMMAND_RPC_GET_RANDOM_RCT_OUTPUTS::response& res)
   {
-    PERF_TIMER(on_get_random_rct_outs);
+    RPC_TRACKER(get_random_rct_outs);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_RANDOM_RCT_OUTPUTS>(invoke_http_mode::BIN, "/getrandom_rctouts.bin", req, res, r))
       return r;
+
+    CHECK_PAYMENT_MIN1(req, res, req.outs_count * COST_PER_OUT, false);
 
     res.status = "Failed";
     if(!m_core.get_random_rct_outs(req, res))
@@ -517,10 +680,12 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_indexes(const COMMAND_RPC_GET_TX_GLOBAL_OUTPUTS_INDEXES::request& req, COMMAND_RPC_GET_TX_GLOBAL_OUTPUTS_INDEXES::response& res)
   {
-    PERF_TIMER(on_get_indexes);
+    RPC_TRACKER(get_indexes);
     bool ok;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_TX_GLOBAL_OUTPUTS_INDEXES>(invoke_http_mode::BIN, "/get_o_indexes.bin", req, res, ok))
       return ok;
+
+    CHECK_PAYMENT_MIN1(req, res, COST_PER_OUTPUT_INDEXES, false);
 
     bool r = m_core.get_tx_outputs_gindexs(req.txid, res.o_indexes);
     if(!r)
@@ -535,10 +700,12 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_transactions(const COMMAND_RPC_GET_TRANSACTIONS::request& req, COMMAND_RPC_GET_TRANSACTIONS::response& res)
   {
-    PERF_TIMER(on_get_transactions);
+    RPC_TRACKER(get_transactions);
     bool ok;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_TRANSACTIONS>(invoke_http_mode::JON, "/gettransactions", req, res, ok))
       return ok;
+
+    CHECK_PAYMENT_MIN1(req, res, req.txs_hashes.size() * COST_PER_TX, false);
 
     std::vector<crypto::hash> vh;
     for(const auto& tx_hex_str: req.txs_hashes)
@@ -689,10 +856,12 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_is_key_image_spent(const COMMAND_RPC_IS_KEY_IMAGE_SPENT::request& req, COMMAND_RPC_IS_KEY_IMAGE_SPENT::response& res, bool request_has_rpc_origin)
   {
-    PERF_TIMER(on_is_key_image_spent);
+    RPC_TRACKER(is_key_image_spent);
     bool ok;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_IS_KEY_IMAGE_SPENT>(invoke_http_mode::JON, "/is_key_image_spent", req, res, ok))
       return ok;
+
+    CHECK_PAYMENT_MIN1(req, res, req.key_images.size() * COST_PER_KEY_IMAGE, false);
 
     std::vector<crypto::key_image> key_images;
     for(const auto& ki_hex_str: req.key_images)
@@ -756,12 +925,13 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_send_raw_tx(const COMMAND_RPC_SEND_RAW_TX::request& req, COMMAND_RPC_SEND_RAW_TX::response& res)
   {
-    PERF_TIMER(on_send_raw_tx);
+    RPC_TRACKER(send_raw_tx);
     bool ok;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_SEND_RAW_TX>(invoke_http_mode::JON, "/sendrawtransaction", req, res, ok))
       return ok;
 
     CHECK_CORE_READY();
+    CHECK_PAYMENT_MIN1(req, res, COST_PER_TX_RELAY, false);
 
     std::string tx_blob;
     if(!string_tools::parse_hexstr_to_binbuff(req.tx_as_hex, tx_blob))
@@ -824,7 +994,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_start_mining(const COMMAND_RPC_START_MINING::request& req, COMMAND_RPC_START_MINING::response& res)
   {
-    PERF_TIMER(on_start_mining);
+    RPC_TRACKER(start_mining);
     CHECK_CORE_READY();
     cryptonote::address_parse_info info;
     if(!get_account_address_from_str(info, m_nettype, req.miner_address))
@@ -872,7 +1042,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_stop_mining(const COMMAND_RPC_STOP_MINING::request& req, COMMAND_RPC_STOP_MINING::response& res)
   {
-    PERF_TIMER(on_stop_mining);
+    RPC_TRACKER(stop_mining);
     if(!m_core.get_miner().stop())
     {
       res.status = "Failed, mining not stopped";
@@ -885,7 +1055,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_mining_status(const COMMAND_RPC_MINING_STATUS::request& req, COMMAND_RPC_MINING_STATUS::response& res)
   {
-    PERF_TIMER(on_mining_status);
+    RPC_TRACKER(mining_status);
 
     const miner& lMiner = m_core.get_miner();
     res.active = lMiner.is_mining();
@@ -904,7 +1074,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_save_bc(const COMMAND_RPC_SAVE_BC::request& req, COMMAND_RPC_SAVE_BC::response& res)
   {
-    PERF_TIMER(on_save_bc);
+    RPC_TRACKER(save_bc);
     if( !m_core.get_blockchain_storage().store_blockchain() )
     {
       res.status = "Error while storing blockchain";
@@ -916,7 +1086,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_peer_list(const COMMAND_RPC_GET_PEER_LIST::request& req, COMMAND_RPC_GET_PEER_LIST::response& res)
   {
-    PERF_TIMER(on_get_peer_list);
+    RPC_TRACKER(get_peer_list);
     std::list<nodetool::peerlist_entry> white_list;
     std::list<nodetool::peerlist_entry> gray_list;
     m_p2p.get_peerlist_manager().get_peerlist_full(gray_list, white_list);
@@ -946,7 +1116,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_set_log_hash_rate(const COMMAND_RPC_SET_LOG_HASH_RATE::request& req, COMMAND_RPC_SET_LOG_HASH_RATE::response& res)
   {
-    PERF_TIMER(on_set_log_hash_rate);
+    RPC_TRACKER(set_log_hash_rate);
     if(m_core.get_miner().is_mining())
     {
       m_core.get_miner().do_print_hashrate(req.visible);
@@ -961,7 +1131,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_set_log_level(const COMMAND_RPC_SET_LOG_LEVEL::request& req, COMMAND_RPC_SET_LOG_LEVEL::response& res)
   {
-    PERF_TIMER(on_set_log_level);
+    RPC_TRACKER(set_log_level);
     if (req.level < 0 || req.level > 4)
     {
       res.status = "Error: log level not valid";
@@ -974,7 +1144,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_set_log_categories(const COMMAND_RPC_SET_LOG_CATEGORIES::request& req, COMMAND_RPC_SET_LOG_CATEGORIES::response& res)
   {
-    PERF_TIMER(on_set_log_categories);
+    RPC_TRACKER(set_log_categories);
     mlog_set_log(req.categories.c_str());
     res.categories = mlog_get_categories();
     res.status = CORE_RPC_STATUS_OK;
@@ -983,34 +1153,48 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_transaction_pool(const COMMAND_RPC_GET_TRANSACTION_POOL::request& req, COMMAND_RPC_GET_TRANSACTION_POOL::response& res, bool request_has_rpc_origin)
   {
-    PERF_TIMER(on_get_transaction_pool);
+    RPC_TRACKER(get_transaction_pool);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_TRANSACTION_POOL>(invoke_http_mode::JON, "/get_transaction_pool", req, res, r))
       return r;
 
-    m_core.get_pool_transactions_and_spent_keys_info(res.transactions, res.spent_key_images, !request_has_rpc_origin || !m_restricted);
+    CHECK_PAYMENT(req, res, 1);
+    size_t n_txes = m_core.get_pool_transactions_count();
+    if (n_txes > 0)
+    {
+      CHECK_PAYMENT_MIN1(req, res, n_txes * COST_PER_TX, true);
+      m_core.get_pool_transactions_and_spent_keys_info(res.transactions, res.spent_key_images, !request_has_rpc_origin || !m_restricted);
+    }
     res.status = CORE_RPC_STATUS_OK;
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_transaction_pool_hashes(const COMMAND_RPC_GET_TRANSACTION_POOL_HASHES::request& req, COMMAND_RPC_GET_TRANSACTION_POOL_HASHES::response& res, bool request_has_rpc_origin)
   {
-    PERF_TIMER(on_get_transaction_pool_hashes);
+    RPC_TRACKER(get_transaction_pool_hashes);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_TRANSACTION_POOL_HASHES>(invoke_http_mode::JON, "/get_transaction_pool_hashes.bin", req, res, r))
       return r;
 
-    m_core.get_pool_transaction_hashes(res.tx_hashes, !request_has_rpc_origin || !m_restricted);
+    CHECK_PAYMENT(req, res, 1);
+    size_t n_txes = m_core.get_pool_transactions_count();
+    if (n_txes > 0)
+    {
+      CHECK_PAYMENT_MIN1(req, res, n_txes * COST_PER_HASH, true);
+      m_core.get_pool_transaction_hashes(res.tx_hashes, !request_has_rpc_origin || !m_restricted);
+    }
     res.status = CORE_RPC_STATUS_OK;
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_transaction_pool_stats(const COMMAND_RPC_GET_TRANSACTION_POOL_STATS::request& req, COMMAND_RPC_GET_TRANSACTION_POOL_STATS::response& res, bool request_has_rpc_origin)
   {
-    PERF_TIMER(on_get_transaction_pool_stats);
+    RPC_TRACKER(get_transaction_pool_stats);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_TRANSACTION_POOL_STATS>(invoke_http_mode::JON, "/get_transaction_pool_stats", req, res, r))
       return r;
+
+    CHECK_PAYMENT_MIN1(req, res, COST_PER_TX_POOL_STATS, false);
 
     m_core.get_pool_transaction_stats(res.pool_stats, !request_has_rpc_origin || !m_restricted);
     res.status = CORE_RPC_STATUS_OK;
@@ -1019,7 +1203,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_stop_daemon(const COMMAND_RPC_STOP_DAEMON::request& req, COMMAND_RPC_STOP_DAEMON::response& res)
   {
-    PERF_TIMER(on_stop_daemon);
+    RPC_TRACKER(stop_daemon);
     // FIXME: replace back to original m_p2p.send_stop_signal() after
     // investigating why that isn't working quite right.
     m_p2p.send_stop_signal();
@@ -1029,7 +1213,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_getblockcount(const COMMAND_RPC_GETBLOCKCOUNT::request& req, COMMAND_RPC_GETBLOCKCOUNT::response& res)
   {
-    PERF_TIMER(on_getblockcount);
+    RPC_TRACKER(getblockcount);
     {
       boost::shared_lock<boost::shared_mutex> lock(m_bootstrap_daemon_mutex);
       if (m_should_use_bootstrap_daemon)
@@ -1045,7 +1229,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_getblockhash(const COMMAND_RPC_GETBLOCKHASH::request& req, COMMAND_RPC_GETBLOCKHASH::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_getblockhash);
+    RPC_TRACKER(getblockhash);
     {
       boost::shared_lock<boost::shared_mutex> lock(m_bootstrap_daemon_mutex);
       if (m_should_use_bootstrap_daemon)
@@ -1087,9 +1271,47 @@ namespace cryptonote
     return 0;
   }
   //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::get_block_template(const account_public_address &address, const cryptonote::blobdata &extra_nonce, size_t &reserved_offset, uint64_t &difficulty, uint64_t &height, uint64_t &expected_reward, block &b, epee::json_rpc::error &error_resp)
+  {
+    b = boost::value_initialized<cryptonote::block>();
+    if(!m_core.get_block_template(b, address, difficulty, height, expected_reward, extra_nonce))
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
+      error_resp.message = "Internal error: failed to create block template";
+      LOG_ERROR("Failed to create block template");
+      return false;
+    }
+    blobdata block_blob = t_serializable_object_to_blob(b);
+    crypto::public_key tx_pub_key = cryptonote::get_tx_pub_key_from_extra(b.miner_tx);
+    if(tx_pub_key == crypto::null_pkey)
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
+      error_resp.message = "Internal error: failed to create block template";
+      LOG_ERROR("Failed to  tx pub key in coinbase extra");
+      return false;
+    }
+    reserved_offset = slow_memmem((void*)block_blob.data(), block_blob.size(), &tx_pub_key, sizeof(tx_pub_key));
+    if(!reserved_offset)
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
+      error_resp.message = "Internal error: failed to create block template";
+      LOG_ERROR("Failed to find tx pub key in blockblob");
+      return false;
+    }
+    reserved_offset += sizeof(tx_pub_key) + 2; //2 bytes: tag for TX_EXTRA_NONCE(1 byte), counter in TX_EXTRA_NONCE(1 byte)
+    if(reserved_offset + extra_nonce.size() > block_blob.size())
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
+      error_resp.message = "Internal error: failed to create block template";
+      LOG_ERROR("Failed to calculate offset for ");
+      return false;
+    }
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_getblocktemplate(const COMMAND_RPC_GETBLOCKTEMPLATE::request& req, COMMAND_RPC_GETBLOCKTEMPLATE::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_getblocktemplate);
+    RPC_TRACKER(getblocktemplate);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GETBLOCKTEMPLATE>(invoke_http_mode::JON_RPC, "getblocktemplate", req, res, r))
       return r;
@@ -1123,41 +1345,12 @@ namespace cryptonote
       return false;
     }
 
-    block b = AUTO_VAL_INIT(b);
+    cryptonote::block b;
     cryptonote::blobdata blob_reserve;
     blob_reserve.resize(req.reserve_size, 0);
-    if(!m_core.get_block_template(b, info.address, res.difficulty, res.height, res.expected_reward, blob_reserve))
-    {
-      error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
-      error_resp.message = "Internal error: failed to create block template";
-      LOG_ERROR("Failed to create block template");
+    if (!get_block_template(info.address, blob_reserve, res.reserved_offset, res.difficulty, res.height, res.expected_reward, b, error_resp))
       return false;
-    }
     blobdata block_blob = t_serializable_object_to_blob(b);
-    crypto::public_key tx_pub_key = cryptonote::get_tx_pub_key_from_extra(b.miner_tx);
-    if(tx_pub_key == crypto::null_pkey)
-    {
-      error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
-      error_resp.message = "Internal error: failed to create block template";
-      LOG_ERROR("Failed to  tx pub key in coinbase extra");
-      return false;
-    }
-    res.reserved_offset = slow_memmem((void*)block_blob.data(), block_blob.size(), &tx_pub_key, sizeof(tx_pub_key));
-    if(!res.reserved_offset)
-    {
-      error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
-      error_resp.message = "Internal error: failed to create block template";
-      LOG_ERROR("Failed to find tx pub key in blockblob");
-      return false;
-    }
-    res.reserved_offset += sizeof(tx_pub_key) + 2; //2 bytes: tag for TX_EXTRA_NONCE(1 byte), counter in TX_EXTRA_NONCE(1 byte)
-    if(res.reserved_offset + req.reserve_size > block_blob.size())
-    {
-      error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
-      error_resp.message = "Internal error: failed to create block template";
-      LOG_ERROR("Failed to calculate offset for ");
-      return false;
-    }
     blobdata hashing_blob = get_block_hashing_blob(b);
     res.prev_hash = string_tools::pod_to_hex(b.prev_id);
     res.blocktemplate_blob = string_tools::buff_to_hex_nodelimer(block_blob);
@@ -1168,7 +1361,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_submitblock(const COMMAND_RPC_SUBMITBLOCK::request& req, COMMAND_RPC_SUBMITBLOCK::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_submitblock);
+    RPC_TRACKER(submitblock);
     {
       boost::shared_lock<boost::shared_mutex> lock(m_bootstrap_daemon_mutex);
       if (m_should_use_bootstrap_daemon)
@@ -1320,12 +1513,13 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_last_block_header(const COMMAND_RPC_GET_LAST_BLOCK_HEADER::request& req, COMMAND_RPC_GET_LAST_BLOCK_HEADER::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_get_last_block_header);
+    RPC_TRACKER(get_last_block_header);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_LAST_BLOCK_HEADER>(invoke_http_mode::JON_RPC, "getlastblockheader", req, res, r))
       return r;
 
     CHECK_CORE_READY();
+    CHECK_PAYMENT_MIN1(req, res, COST_PER_BLOCK_HEADER, false);
     uint64_t last_block_height;
     crypto::hash last_block_hash;
     m_core.get_blockchain_top(last_block_height, last_block_hash);
@@ -1349,10 +1543,12 @@ namespace cryptonote
   }
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_block_header_by_hash(const COMMAND_RPC_GET_BLOCK_HEADER_BY_HASH::request& req, COMMAND_RPC_GET_BLOCK_HEADER_BY_HASH::response& res, epee::json_rpc::error& error_resp){
-    PERF_TIMER(on_get_block_header_by_hash);
+    RPC_TRACKER(get_block_header_by_hash);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_BLOCK_HEADER_BY_HASH>(invoke_http_mode::JON_RPC, "getblockheaderbyhash", req, res, r))
       return r;
+
+    CHECK_PAYMENT_MIN1(req, res, COST_PER_BLOCK_HEADER, false);
 
     crypto::hash block_hash;
     bool hash_parsed = parse_hash256(req.hash, block_hash);
@@ -1390,7 +1586,7 @@ namespace cryptonote
   }
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_block_headers_range(const COMMAND_RPC_GET_BLOCK_HEADERS_RANGE::request& req, COMMAND_RPC_GET_BLOCK_HEADERS_RANGE::response& res, epee::json_rpc::error& error_resp){
-    PERF_TIMER(on_get_block_headers_range);
+    RPC_TRACKER(get_block_headers_range);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_BLOCK_HEADERS_RANGE>(invoke_http_mode::JON_RPC, "getblockheadersrange", req, res, r))
       return r;
@@ -1402,6 +1598,7 @@ namespace cryptonote
       error_resp.message = "Invalid start/end heights.";
       return false;
     }
+    CHECK_PAYMENT_MIN1(req, res, (req.end_height - req.start_height + 1) * COST_PER_BLOCK_HEADER, false);
     for (uint64_t h = req.start_height; h <= req.end_height; ++h)
     {
       crypto::hash block_hash = m_core.get_block_id_by_height(h);
@@ -1440,7 +1637,7 @@ namespace cryptonote
   }
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_block_header_by_height(const COMMAND_RPC_GET_BLOCK_HEADER_BY_HEIGHT::request& req, COMMAND_RPC_GET_BLOCK_HEADER_BY_HEIGHT::response& res, epee::json_rpc::error& error_resp){
-    PERF_TIMER(on_get_block_header_by_height);
+    RPC_TRACKER(get_block_header_by_height);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_BLOCK_HEADER_BY_HEIGHT>(invoke_http_mode::JON_RPC, "getblockheaderbyheight", req, res, r))
       return r;
@@ -1451,6 +1648,7 @@ namespace cryptonote
       error_resp.message = std::string("Too big height: ") + std::to_string(req.height) + ", current blockchain height = " +  std::to_string(m_core.get_current_blockchain_height());
       return false;
     }
+    CHECK_PAYMENT_MIN1(req, res, COST_PER_BLOCK_HEADER, false);
     crypto::hash block_hash = m_core.get_block_id_by_height(req.height);
     block blk;
     bool have_block = m_core.get_block_by_hash(block_hash, blk);
@@ -1472,10 +1670,12 @@ namespace cryptonote
   }
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_block(const COMMAND_RPC_GET_BLOCK::request& req, COMMAND_RPC_GET_BLOCK::response& res, epee::json_rpc::error& error_resp){
-    PERF_TIMER(on_get_block);
+    RPC_TRACKER(get_block);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_BLOCK>(invoke_http_mode::JON_RPC, "getblock", req, res, r))
       return r;
+
+    CHECK_PAYMENT_MIN1(req, res, COST_PER_BLOCK, false);
 
     crypto::hash block_hash;
     if (!req.hash.empty())
@@ -1534,7 +1734,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_connections(const COMMAND_RPC_GET_CONNECTIONS::request& req, COMMAND_RPC_GET_CONNECTIONS::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_get_connections);
+    RPC_TRACKER(get_connections);
 
     res.connections = m_p2p.get_payload_object().get_connections();
 
@@ -1545,7 +1745,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_info_json(const COMMAND_RPC_GET_INFO::request& req, COMMAND_RPC_GET_INFO::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_get_info_json);
+    RPC_TRACKER(get_info_json);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_INFO>(invoke_http_mode::JON_RPC, "get_info", req, res, r))
     {
@@ -1556,6 +1756,8 @@ namespace cryptonote
       res.was_bootstrap_ever_used = true;
       return r;
     }
+
+    CHECK_PAYMENT_MIN1(req, res, COST_PER_GET_INFO, false);
 
     crypto::hash top_hash;
     m_core.get_blockchain_top(res.height, top_hash);
@@ -1594,7 +1796,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_hard_fork_info(const COMMAND_RPC_HARD_FORK_INFO::request& req, COMMAND_RPC_HARD_FORK_INFO::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_hard_fork_info);
+    RPC_TRACKER(hard_fork_info);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_HARD_FORK_INFO>(invoke_http_mode::JON_RPC, "hard_fork_info", req, res, r))
       return r;
@@ -1610,7 +1812,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_bans(const COMMAND_RPC_GETBANS::request& req, COMMAND_RPC_GETBANS::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_get_bans);
+    RPC_TRACKER(get_bans);
 
     auto now = time(nullptr);
     std::map<std::string, time_t> blocked_hosts = m_p2p.get_blocked_hosts();
@@ -1634,7 +1836,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_set_bans(const COMMAND_RPC_SETBANS::request& req, COMMAND_RPC_SETBANS::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_set_bans);
+    RPC_TRACKER(set_bans);
 
     for (auto i = req.bans.begin(); i != req.bans.end(); ++i)
     {
@@ -1664,7 +1866,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_flush_txpool(const COMMAND_RPC_FLUSH_TRANSACTION_POOL::request& req, COMMAND_RPC_FLUSH_TRANSACTION_POOL::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_flush_txpool);
+    RPC_TRACKER(flush_txpool);
 
     bool failed = false;
     std::list<crypto::hash> txids;
@@ -1719,10 +1921,11 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_output_histogram(const COMMAND_RPC_GET_OUTPUT_HISTOGRAM::request& req, COMMAND_RPC_GET_OUTPUT_HISTOGRAM::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_get_output_histogram);
+    RPC_TRACKER(get_output_histogram);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_OUTPUT_HISTOGRAM>(invoke_http_mode::JON_RPC, "get_output_histogram", req, res, r))
       return r;
+    CHECK_PAYMENT_MIN1(req, res, COST_PER_OUTPUT_HISTOGRAM, false);
 
     std::map<uint64_t, std::tuple<uint64_t, uint64_t, uint64_t>> histogram;
     try
@@ -1749,7 +1952,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_version(const COMMAND_RPC_GET_VERSION::request& req, COMMAND_RPC_GET_VERSION::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_get_version);
+    RPC_TRACKER(get_version);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_VERSION>(invoke_http_mode::JON_RPC, "get_version", req, res, r))
       return r;
@@ -1761,7 +1964,8 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_coinbase_tx_sum(const COMMAND_RPC_GET_COINBASE_TX_SUM::request& req, COMMAND_RPC_GET_COINBASE_TX_SUM::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_get_coinbase_tx_sum);
+    RPC_TRACKER(get_coinbase_tx_sum);
+    CHECK_PAYMENT_MIN1(req, res, COST_PER_COINBASE_TX_SUM, false);
     std::pair<uint64_t, uint64_t> amounts = m_core.get_coinbase_tx_sum(req.height, req.count);
     res.emission_amount = amounts.first;
     res.fee_amount = amounts.second;
@@ -1771,11 +1975,12 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_per_kb_fee_estimate(const COMMAND_RPC_GET_PER_KB_FEE_ESTIMATE::request& req, COMMAND_RPC_GET_PER_KB_FEE_ESTIMATE::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_get_per_kb_fee_estimate);
+    RPC_TRACKER(get_per_kb_fee_estimate);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_PER_KB_FEE_ESTIMATE>(invoke_http_mode::JON_RPC, "get_fee_estimate", req, res, r))
       return r;
 
+    CHECK_PAYMENT(req, res, COST_PER_FEE_ESTIMATE);
     res.fee = m_core.get_blockchain_storage().get_dynamic_per_kb_fee_estimate(req.grace_blocks);
     res.status = CORE_RPC_STATUS_OK;
     return true;
@@ -1783,7 +1988,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_alternate_chains(const COMMAND_RPC_GET_ALTERNATE_CHAINS::request& req, COMMAND_RPC_GET_ALTERNATE_CHAINS::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_get_alternate_chains);
+    RPC_TRACKER(get_alternate_chains);
     try
     {
       std::list<std::pair<Blockchain::block_extended_info, uint64_t>> chains = m_core.get_blockchain_storage().get_alternative_chains();
@@ -1802,7 +2007,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_limit(const COMMAND_RPC_GET_LIMIT::request& req, COMMAND_RPC_GET_LIMIT::response& res)
   {
-    PERF_TIMER(on_get_limit);
+    RPC_TRACKER(get_limit);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_LIMIT>(invoke_http_mode::JON, "/get_limit", req, res, r))
       return r;
@@ -1815,7 +2020,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_set_limit(const COMMAND_RPC_SET_LIMIT::request& req, COMMAND_RPC_SET_LIMIT::response& res)
   {
-    PERF_TIMER(on_set_limit);
+    RPC_TRACKER(set_limit);
     // -1 = reset to default
     //  0 = do not modify
 
@@ -1855,7 +2060,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_out_peers(const COMMAND_RPC_OUT_PEERS::request& req, COMMAND_RPC_OUT_PEERS::response& res)
   {
-    PERF_TIMER(on_out_peers);
+    RPC_TRACKER(out_peers);
     size_t n_connections = m_p2p.get_outgoing_connections_count();
     size_t n_delete = (n_connections > req.out_peers) ? n_connections - req.out_peers : 0;
     m_p2p.m_config.m_net_config.max_out_connection_count = req.out_peers;
@@ -1867,7 +2072,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_in_peers(const COMMAND_RPC_IN_PEERS::request& req, COMMAND_RPC_IN_PEERS::response& res)
   {
-    PERF_TIMER(on_in_peers);
+    RPC_TRACKER(in_peers);
     size_t n_connections = m_p2p.get_incoming_connections_count();
     size_t n_delete = (n_connections > req.in_peers) ? n_connections - req.in_peers : 0;
     m_p2p.m_config.m_net_config.max_in_connection_count = req.in_peers;
@@ -1879,7 +2084,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_start_save_graph(const COMMAND_RPC_START_SAVE_GRAPH::request& req, COMMAND_RPC_START_SAVE_GRAPH::response& res)
   {
-	  PERF_TIMER(on_start_save_graph);
+	  RPC_TRACKER(start_save_graph);
 	  m_p2p.set_save_graph(true);
 	  res.status = CORE_RPC_STATUS_OK;
 	  return true;
@@ -1887,7 +2092,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_stop_save_graph(const COMMAND_RPC_STOP_SAVE_GRAPH::request& req, COMMAND_RPC_STOP_SAVE_GRAPH::response& res)
   {
-	  PERF_TIMER(on_stop_save_graph);
+	  RPC_TRACKER(stop_save_graph);
 	  m_p2p.set_save_graph(false);
 	  res.status = CORE_RPC_STATUS_OK;
 	  return true;
@@ -1895,7 +2100,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_update(const COMMAND_RPC_UPDATE::request& req, COMMAND_RPC_UPDATE::response& res)
   {
-    PERF_TIMER(on_update);
+    RPC_TRACKER(update);
     static const char software[] = "monero";
 #ifdef BUILD_TAG
     static const char buildtag[] = BOOST_PP_STRINGIZE(BUILD_TAG);
@@ -1990,7 +2195,8 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_relay_tx(const COMMAND_RPC_RELAY_TX::request& req, COMMAND_RPC_RELAY_TX::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_relay_tx);
+    RPC_TRACKER(relay_tx);
+    CHECK_PAYMENT_MIN1(req, res, req.txids.size() * COST_PER_TX_RELAY, false);
 
     bool failed = false;
     res.status = "";
@@ -2036,7 +2242,8 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_sync_info(const COMMAND_RPC_SYNC_INFO::request& req, COMMAND_RPC_SYNC_INFO::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_sync_info);
+    RPC_TRACKER(sync_info);
+    CHECK_PAYMENT(req, res, COST_PER_SYNC_INFO);
 
     crypto::hash top_hash;
     m_core.get_blockchain_top(res.height, top_hash);
@@ -2063,10 +2270,11 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_txpool_backlog(const COMMAND_RPC_GET_TRANSACTION_POOL_BACKLOG::request& req, COMMAND_RPC_GET_TRANSACTION_POOL_BACKLOG::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_get_txpool_backlog);
+    RPC_TRACKER(get_txpool_backlog);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_TRANSACTION_POOL_BACKLOG>(invoke_http_mode::JON_RPC, "get_txpool_backlog", req, res, r))
       return r;
+    CHECK_PAYMENT_MIN1(req, res, COST_PER_TX_POOL_STATS, false);
 
     if (!m_core.get_txpool_backlog(res.backlog))
     {
@@ -2081,10 +2289,15 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_output_distribution(const COMMAND_RPC_GET_OUTPUT_DISTRIBUTION::request& req, COMMAND_RPC_GET_OUTPUT_DISTRIBUTION::response& res, epee::json_rpc::error& error_resp)
   {
-    PERF_TIMER(on_get_output_distribution);
+    RPC_TRACKER(on_get_output_distribution);
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_OUTPUT_DISTRIBUTION>(invoke_http_mode::JON_RPC, "get_output_distribution", req, res, r))
       return r;
+
+    size_t n_0 = 0, n_non0 = 0;
+    for (uint64_t amount: req.amounts)
+      if (amount) ++n_non0; else ++n_0;
+    CHECK_PAYMENT_MIN1(req, res, n_0 * COST_PER_OUTPUT_DISTRIBUTION_0 + n_non0 * COST_PER_OUTPUT_DISTRIBUTION, false);
 
     try
     {
@@ -2159,8 +2372,145 @@ namespace cryptonote
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_rpc_access_info(const COMMAND_RPC_ACCESS_INFO::request& req, COMMAND_RPC_ACCESS_INFO::response& res, epee::json_rpc::error& error_resp)
+  {
+    RPC_TRACKER(rpc_access_info);
 
+    bool r;
+    if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_ACCESS_INFO>(invoke_http_mode::JON, "rpc_access_info", req, res, r))
+      return r;
 
+    // if RPC payment is not enabled
+    if (m_rpc_payment == NULL)
+    {
+      res.diff = 0;
+      res.credits_per_hash_found = 0;
+      res.credits = 0;
+      res.status = CORE_RPC_STATUS_OK;
+      return true;
+    }
+
+    crypto::public_key client;
+    if (!epee::string_tools::hex_to_pod(req.client.substr(0, 2 * sizeof(client)), client))
+    {
+      res.credits = 0;
+      res.status = "Invalid client ID";
+      return true;
+    }
+
+    uint64_t height;
+    crypto::hash top_hash;
+    m_core.get_blockchain_top(height, top_hash);
+    cryptonote::blobdata hashing_blob;
+    if (!m_rpc_payment->get_info(client, [&](const crypto::public_key &client, cryptonote::block &b)->bool{
+      uint64_t difficulty, height, expected_reward;
+      size_t reserved_offset;
+      const cryptonote::blobdata extra_nonce((const char*)&client, 4);
+      if (!get_block_template(m_rpc_payment->get_payment_address(), extra_nonce, reserved_offset, difficulty, height, expected_reward, b, error_resp))
+        return false;
+      return true;
+    }, hashing_blob, top_hash, res.diff, res.credits_per_hash_found, res.credits))
+    {
+      return true;
+    }
+    res.hashing_blob = epee::string_tools::buff_to_hex_nodelimer(hashing_blob);
+
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_rpc_access_payment(const COMMAND_RPC_ACCESS_PAYMENT::request& req, COMMAND_RPC_ACCESS_PAYMENT::response& res, epee::json_rpc::error& error_resp)
+  {
+    RPC_TRACKER(rpc_access_payment);
+
+    bool r;
+    if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_ACCESS_PAYMENT>(invoke_http_mode::JON, "rpc_access_info", req, res, r))
+      return r;
+
+    // if RPC payment is not enabled
+    if (m_rpc_payment == NULL)
+    {
+      res.status = "Payment not necessary";
+      return true;
+    }
+
+    crypto::public_key client;
+    if (!epee::string_tools::hex_to_pod(req.client.substr(0, 2 * sizeof(client)), client))
+    {
+      res.status = "Invalid client ID";
+      return true;
+    }
+
+    std::string error;
+    crypto::hash hash;
+    cryptonote::block block;
+    crypto::hash top_hash;
+    uint64_t height;
+    m_core.get_blockchain_top(height, top_hash);
+    if (!m_rpc_payment->submit_nonce(client, req.nonce, top_hash, error, res.credits, hash, block))
+    {
+      res.status = error;
+      return true;
+    }
+
+    // it might be a valid block!
+    const difficulty_type current_difficulty = m_core.get_blockchain_storage().get_difficulty_for_next_block();
+    if (check_hash(hash, current_difficulty))
+    {
+      MINFO("This payment meets the current network difficulty");
+      if(m_core.handle_block_found(block))
+        MGINFO_GREEN("Block found by RPC user at height " << get_block_height(block) << ": " <<
+            print_money(cryptonote::get_outs_money_amount(block.miner_tx)));
+      else
+        MERROR("Seemingly valid block was not accepted");
+    }
+
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_rpc_tracking(const COMMAND_RPC_TRACKING::request& req, COMMAND_RPC_TRACKING::response& res, epee::json_rpc::error& error_resp)
+  {
+    RPC_TRACKER(rpc_access_tracking);
+
+    if (req.clear)
+    {
+      RPCTracker::clear();
+      res.status = CORE_RPC_STATUS_OK;
+      return true;
+    }
+
+    auto data = RPCTracker::data();
+    for (const auto &d: data)
+    {
+      res.data.resize(res.data.size() + 1);
+      res.data.back().rpc = d.first;
+      res.data.back().count = std::get<0>(d.second);
+      res.data.back().time = std::get<1>(d.second);
+      res.data.back().credits = std::get<2>(d.second);
+    }
+
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_rpc_access_data(const COMMAND_RPC_ACCESS_DATA::request& req, COMMAND_RPC_ACCESS_DATA::response& res, epee::json_rpc::error& error_resp)
+  {
+    RPC_TRACKER(rpc_access_data);
+
+    bool r;
+    if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_ACCESS_DATA>(invoke_http_mode::JON, "rpc_access_data", req, res, r))
+      return r;
+
+    m_rpc_payment->foreach([&](const crypto::public_key &client, uint64_t credits, uint64_t last_request_timestamp){
+      res.entries.push_back({epee::string_tools::pod_to_hex(client), credits, last_request_timestamp});
+      return true;
+    });
+
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
   const command_line::arg_descriptor<std::string, false, true, 2> core_rpc_server::arg_rpc_bind_port = {
       "rpc-bind-port"
     , "Port for RPC server"
@@ -2197,5 +2547,23 @@ namespace cryptonote
       "bootstrap-daemon-login"
     , "Specify username:password for the bootstrap daemon login"
     , ""
+    };
+
+  const command_line::arg_descriptor<std::string> core_rpc_server::arg_rpc_payment_address = {
+      "rpc-payment-address"
+    , "Restrict RPC to clients sending micropayment to this address"
+    , ""
+    };
+
+  const command_line::arg_descriptor<uint64_t> core_rpc_server::arg_rpc_payment_difficulty = {
+      "rpc-payment-difficulty"
+    , "Restrict RPC to clients sending micropayment at this difficulty"
+    , DEFAULT_PAYMENT_DIFFICULTY
+    };
+
+  const command_line::arg_descriptor<uint64_t> core_rpc_server::arg_rpc_payment_credits = {
+      "rpc-payment-credits"
+    , "Restrict RPC to clients sending micropayment, yields that many credits per payment"
+    , DEFAULT_PAYMENT_CREDITS_PER_HASH
     };
 }  // namespace cryptonote

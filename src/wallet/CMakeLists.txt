@@ -44,6 +44,7 @@ set(wallet_private_headers
   wallet_rpc_server_commands_defs.h
   wallet_rpc_server_error_codes.h
   ringdb.h
+  wallet_rpc_helpers.h
   node_rpc_proxy.h)
 
 monero_private_headers(wallet
@@ -53,6 +54,7 @@ monero_add_library(wallet
   ${wallet_private_headers})
 target_link_libraries(wallet
   PUBLIC
+    rpc_base
     multisig
     common
     cryptonote_core
@@ -108,6 +110,7 @@ if (BUILD_GUI_DEPS)
     set(libs_to_merge
             wallet_api
             wallet
+            rpc_base
             multisig
             cryptonote_core
             cryptonote_basic

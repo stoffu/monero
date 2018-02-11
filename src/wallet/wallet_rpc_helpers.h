@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2018, The Monero Project
+// Copyright (c) 2018, The Monero Project
 // 
 // All rights reserved.
 // 
@@ -25,26 +25,20 @@
 // INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-// 
-// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
-#pragma  once 
+#pragma once
 
+#include <type_traits>
 
-#define CORE_RPC_ERROR_CODE_WRONG_PARAM           -1
-#define CORE_RPC_ERROR_CODE_TOO_BIG_HEIGHT        -2
-#define CORE_RPC_ERROR_CODE_TOO_BIG_RESERVE_SIZE  -3
-#define CORE_RPC_ERROR_CODE_WRONG_WALLET_ADDRESS  -4
-#define CORE_RPC_ERROR_CODE_INTERNAL_ERROR        -5
-#define CORE_RPC_ERROR_CODE_WRONG_BLOCKBLOB       -6
-#define CORE_RPC_ERROR_CODE_BLOCK_NOT_ACCEPTED    -7
-#define CORE_RPC_ERROR_CODE_CORE_BUSY             -9
-#define CORE_RPC_ERROR_CODE_WRONG_BLOCKBLOB_SIZE  -10
-#define CORE_RPC_ERROR_CODE_UNSUPPORTED_RPC       -11
-#define CORE_RPC_ERROR_CODE_MINING_TO_SUBADDRESS  -12
-#define CORE_RPC_ERROR_CODE_PAYMENT_REQUIRED      -13
-#define CORE_RPC_ERROR_CODE_INVALID_CLIENT        -14
-#define CORE_RPC_ERROR_CODE_PAYMENT_TOO_LOW       -15
-#define CORE_RPC_ERROR_CODE_DUPLICATE_PAYMENT     -16
-
-
+namespace
+{
+  // credits to yrp (https://stackoverflow.com/questions/87372-check-if-a-class-has-a-member-function-of-a-given-signature
+  template <typename T>
+  struct HasCredits
+  {
+    template<typename U, uint64_t (U::*)> struct SFINAE {};
+    template<typename U> static char Test(SFINAE<U, &U::credits>*);
+    template<typename U> static int Test(...);
+    static const bool Has = sizeof(Test<T>(0)) == sizeof(char);
+  };
+}

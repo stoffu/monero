@@ -35,6 +35,7 @@
 #include "rpc/core_rpc_server_commands_defs.h"
 #include "cryptonote_core/cryptonote_core.h"
 #include "cryptonote_basic/hardfork.h"
+#include "rpc/rpc_payment_signature.h"
 #include <boost/format.hpp>
 #include <ctime>
 #include <string>
@@ -310,6 +311,7 @@ bool t_rpc_command_executor::show_difficulty() {
   }
   else
   {
+    req.client = m_rpc_server->get_client_id_signature();
     if (!m_rpc_server->on_get_info(req, res) || res.status != CORE_RPC_STATUS_OK)
     {
       tools::fail_msg_writer() << make_error(fail_message.c_str(), res.status);
@@ -396,6 +398,7 @@ bool t_rpc_command_executor::show_status() {
   }
   else
   {
+    ireq.client = m_rpc_server->get_client_id_signature();
     if (!m_rpc_server->on_get_info(ireq, ires) || ires.status != CORE_RPC_STATUS_OK)
     {
       tools::fail_msg_writer() << make_error(fail_message, ires.status);
@@ -542,6 +545,7 @@ bool t_rpc_command_executor::print_blockchain_info(uint64_t start_block_index, u
   }
   else
   {
+    req.client = m_rpc_server->get_client_id_signature();
     if (!m_rpc_server->on_get_block_headers_range(req, res, error_resp) || res.status != CORE_RPC_STATUS_OK)
     {
       tools::fail_msg_writer() << make_error(fail_message, res.status);
@@ -668,6 +672,7 @@ bool t_rpc_command_executor::print_block_by_hash(crypto::hash block_hash) {
   }
   else
   {
+    req.client = m_rpc_server->get_client_id_signature();
     if (!m_rpc_server->on_get_block(req, res, error_resp) || res.status != CORE_RPC_STATUS_OK)
     {
       tools::fail_msg_writer() << make_error(fail_message, res.status);
@@ -700,6 +705,7 @@ bool t_rpc_command_executor::print_block_by_height(uint64_t height) {
   }
   else
   {
+    req.client = m_rpc_server->get_client_id_signature();
     if (!m_rpc_server->on_get_block(req, res, error_resp) || res.status != CORE_RPC_STATUS_OK)
     {
       tools::fail_msg_writer() << make_error(fail_message, res.status);
@@ -733,6 +739,7 @@ bool t_rpc_command_executor::print_transaction(crypto::hash transaction_hash,
   }
   else
   {
+    req.client = m_rpc_server->get_client_id_signature();
     if (!m_rpc_server->on_get_transactions(req, res) || res.status != CORE_RPC_STATUS_OK)
     {
       tools::fail_msg_writer() << make_error(fail_message, res.status);
@@ -800,6 +807,7 @@ bool t_rpc_command_executor::is_key_image_spent(const crypto::key_image &ki) {
   }
   else
   {
+    req.client = m_rpc_server->get_client_id_signature();
     if (!m_rpc_server->on_is_key_image_spent(req, res) || res.status != CORE_RPC_STATUS_OK)
     {
       tools::fail_msg_writer() << make_error(fail_message, res.status);
@@ -835,6 +843,7 @@ bool t_rpc_command_executor::print_transaction_pool_long() {
   }
   else
   {
+    req.client = m_rpc_server->get_client_id_signature();
     if (!m_rpc_server->on_get_transaction_pool(req, res, false) || res.status != CORE_RPC_STATUS_OK)
     {
       tools::fail_msg_writer() << make_error(fail_message, res.status);
@@ -920,6 +929,7 @@ bool t_rpc_command_executor::print_transaction_pool_short() {
   }
   else
   {
+    req.client = m_rpc_server->get_client_id_signature();
     if (!m_rpc_server->on_get_transaction_pool(req, res, false) || res.status != CORE_RPC_STATUS_OK)
     {
       tools::fail_msg_writer() << make_error(fail_message, res.status);
@@ -977,11 +987,13 @@ bool t_rpc_command_executor::print_transaction_pool_stats() {
   else
   {
     memset(&res.pool_stats, 0, sizeof(res.pool_stats));
+    req.client = m_rpc_server->get_client_id_signature();
     if (!m_rpc_server->on_get_transaction_pool_stats(req, res, false) || res.status != CORE_RPC_STATUS_OK)
     {
       tools::fail_msg_writer() << make_error(fail_message, res.status);
       return true;
     }
+    ireq.client = m_rpc_server->get_client_id_signature();
     if (!m_rpc_server->on_get_info(ireq, ires) || ires.status != CORE_RPC_STATUS_OK)
     {
       tools::fail_msg_writer() << make_error(fail_message, ires.status);
@@ -1576,6 +1588,7 @@ bool t_rpc_command_executor::output_histogram(const std::vector<uint64_t> &amoun
     }
     else
     {
+        req.client = m_rpc_server->get_client_id_signature();
         if (!m_rpc_server->on_get_output_histogram(req, res, error_resp) || res.status != CORE_RPC_STATUS_OK)
         {
             tools::fail_msg_writer() << make_error(fail_message, res.status);
@@ -1613,6 +1626,7 @@ bool t_rpc_command_executor::print_coinbase_tx_sum(uint64_t height, uint64_t cou
   }
   else
   {
+    req.client = m_rpc_server->get_client_id_signature();
     if (!m_rpc_server->on_get_coinbase_tx_sum(req, res, error_resp) || res.status != CORE_RPC_STATUS_OK)
     {
       tools::fail_msg_writer() << make_error(fail_message, res.status);
@@ -1651,6 +1665,7 @@ bool t_rpc_command_executor::alt_chain_info()
   }
   else
   {
+    ireq.client = m_rpc_server->get_client_id_signature();
     if (!m_rpc_server->on_get_info(ireq, ires) || ires.status != CORE_RPC_STATUS_OK)
     {
       tools::fail_msg_writer() << make_error(fail_message, ires.status);
@@ -1699,6 +1714,7 @@ bool t_rpc_command_executor::print_blockchain_dynamic_stats(uint64_t nblocks)
   }
   else
   {
+    ireq.client = m_rpc_server->get_client_id_signature();
     if (!m_rpc_server->on_get_info(ireq, ires) || ires.status != CORE_RPC_STATUS_OK)
     {
       tools::fail_msg_writer() << make_error(fail_message, ires.status);
@@ -1730,6 +1746,7 @@ bool t_rpc_command_executor::print_blockchain_dynamic_stats(uint64_t nblocks)
     }
     else
     {
+      bhreq.client = m_rpc_server->get_client_id_signature();
       if (!m_rpc_server->on_get_block_headers_range(bhreq, bhres, error_resp) || bhres.status != CORE_RPC_STATUS_OK)
       {
         tools::fail_msg_writer() << make_error(fail_message, bhres.status);
@@ -1846,6 +1863,7 @@ bool t_rpc_command_executor::relay_tx(const std::string &txid)
     }
     else
     {
+        req.client = m_rpc_server->get_client_id_signature();
         if (!m_rpc_server->on_relay_tx(req, res, error_resp) || res.status != CORE_RPC_STATUS_OK)
         {
             tools::fail_msg_writer() << make_error(fail_message, res.status);
@@ -1873,6 +1891,7 @@ bool t_rpc_command_executor::sync_info()
     }
     else
     {
+        req.client = m_rpc_server->get_client_id_signature();
         if (!m_rpc_server->on_sync_info(req, res, error_resp) || res.status != CORE_RPC_STATUS_OK)
         {
             tools::fail_msg_writer() << make_error(fail_message, res.status);
@@ -1913,6 +1932,38 @@ bool t_rpc_command_executor::sync_info()
       {
         tools::success_msg_writer() << address << "  " << s.nblocks << " (" << s.start_block_height << " - " << (s.start_block_height + s.nblocks - 1) << ", " << (uint64_t)(s.size/1e3) << " kB)  " << (unsigned)(s.rate/1e3) << " kB/s (" << s.speed/100.0f << ")";
       }
+    }
+
+    return true;
+}
+
+bool t_rpc_command_executor::rpc_payments()
+{
+    cryptonote::COMMAND_RPC_ACCESS_DATA::request req;
+    cryptonote::COMMAND_RPC_ACCESS_DATA::response res;
+    std::string fail_message = "Unsuccessful";
+    epee::json_rpc::error error_resp;
+
+    if (m_is_rpc)
+    {
+        if (!m_rpc_client->json_rpc_request(req, res, "rpc_access_data", fail_message.c_str()))
+        {
+            return true;
+        }
+    }
+    else
+    {
+        if (!m_rpc_server->on_rpc_access_data(req, res, error_resp) || res.status != CORE_RPC_STATUS_OK)
+        {
+            tools::fail_msg_writer() << make_error(fail_message, res.status);
+            return true;
+        }
+    }
+
+    const uint64_t now = (boost::posix_time::microsec_clock::universal_time() - cryptonote::rpc_payment_epoch).total_seconds();
+    for (const auto &entry: res.entries)
+    {
+      tools::msg_writer() << entry.client << "  " << entry.balance << " " << get_human_time_ago(entry.last_request_timestamp / 1000000, now);
     }
 
     return true;
