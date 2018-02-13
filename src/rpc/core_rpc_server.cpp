@@ -227,6 +227,19 @@ namespace cryptonote
 
     std::list<std::pair<cryptonote::blobdata, std::list<cryptonote::blobdata> > > bs;
 
+    // quick check for noop
+    if (!req.block_ids.empty())
+    {
+      uint64_t last_block_height;
+      crypto::hash last_block_hash;
+      m_core.get_blockchain_top(last_block_height, last_block_hash);
+      if (last_block_hash == req.block_ids.front())
+      {
+        res.status = CORE_RPC_STATUS_OK;
+        return true;
+      }
+    }
+
     if(!m_core.find_blockchain_supplement(req.start_height, req.block_ids, bs, res.current_height, res.start_height, req.prune, COMMAND_RPC_GET_BLOCKS_FAST_MAX_COUNT))
     {
       res.status = "Failed";
