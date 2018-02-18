@@ -66,6 +66,8 @@ class Serialization_portability_wallet_Test;
 
 namespace tools
 {
+  class ringdb;
+
   class i_wallet2_callback
   {
   public:
@@ -165,6 +167,7 @@ namespace tools
     static bool verify_password(const std::string& keys_file_name, const epee::wipeable_string& password, bool no_spend_key);
 
     wallet2(bool testnet = false, bool restricted = false);
+    ~wallet2();
 
     struct multisig_info
     {
@@ -796,6 +799,9 @@ namespace tools
       if(ver < 23)
         return;
       a & m_account_tags;
+      if(ver < 24)
+        return;
+      a & m_ring_history_saved;
     }
 
     /*!
@@ -1013,6 +1019,12 @@ namespace tools
     crypto::public_key get_multisig_signing_public_key(size_t idx) const;
     crypto::public_key get_multisig_signing_public_key(const crypto::secret_key &skey) const;
 
+    void set_ring_database(const std::string &filename);
+    const std::string get_ring_database() const { return m_ring_database; }
+    bool get_ring(const crypto::key_image &key_image, std::vector<uint64_t> &outs);
+    bool set_ring(const crypto::key_image &key_image, const std::vector<uint64_t> &outs, bool relative);
+    bool find_and_save_rings();
+
   private:
     /*!
      * \brief  Stores wallet information to wallet file.
@@ -1069,6 +1081,10 @@ namespace tools
     rct::multisig_kLRki get_multisig_kLRki(size_t n, const rct::key &k) const;
     rct::key get_multisig_k(size_t idx, const std::unordered_set<rct::key> &used_L) const;
     void update_multisig_rescan_info(const std::vector<std::vector<rct::key>> &multisig_k, const std::vector<std::vector<tools::wallet2::multisig_info>> &info, size_t n);
+    bool add_rings(const crypto::chacha_key &key, const cryptonote::transaction_prefix &tx);
+    bool add_rings(const cryptonote::transaction_prefix &tx);
+    bool remove_rings(const cryptonote::transaction_prefix &tx);
+    bool get_ring(const crypto::chacha_key &key, const crypto::key_image &key_image, std::vector<uint64_t> &outs);
 
     bool get_output_distribution(uint64_t &start_height, std::vector<uint64_t> &offsets);
 
@@ -1153,9 +1169,13 @@ namespace tools
     std::unordered_map<crypto::hash, address_tx> m_light_wallet_address_txs;
     // store calculated key image for faster lookup
     std::unordered_map<crypto::public_key, std::map<uint64_t, crypto::key_image> > m_key_image_cache;
+
+    std::string m_ring_database;
+    bool m_ring_history_saved;
+    ringdb *m_ringdb;
   };
 }
-BOOST_CLASS_VERSION(tools::wallet2, 23)
+BOOST_CLASS_VERSION(tools::wallet2, 24)
 BOOST_CLASS_VERSION(tools::wallet2::transfer_details, 9)
 BOOST_CLASS_VERSION(tools::wallet2::multisig_info, 1)
 BOOST_CLASS_VERSION(tools::wallet2::multisig_info::LR, 0)

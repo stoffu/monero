@@ -1195,6 +1195,133 @@ bool simple_wallet::export_raw_multisig(const std::vector<std::string> &args)
   return true;
 }
 
+bool simple_wallet::print_ring(const std::vector<std::string> &args)
+{
+  crypto::key_image key_image;
+  if (args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: print_ring <key_image>");
+    return true;
+  }
+
+  if (!epee::string_tools::hex_to_pod(args[0], key_image))
+  {
+    fail_msg_writer() << tr("Invalid key image");
+    return true;
+  }
+
+  std::vector<uint64_t> ring;
+  try
+  {
+    if (m_wallet->get_ring(key_image, ring))
+    {
+      std::stringstream str;
+      for (const auto &x: ring)
+        str << std::to_string(x) << " ";
+      success_msg_writer() << tr("Ring size ") << std::to_string(ring.size()) << ": " << str.str() << tr(" (absolute)");
+    }
+    else
+    {
+      fail_msg_writer() << tr("Key image either not spent, or spent with mixin 0");
+    }
+  }
+  catch (const std::exception &e)
+  {
+    fail_msg_writer() << tr("Failed to get key image ring: ") << e.what();
+  }
+
+  return true;
+}
+
+bool simple_wallet::set_ring(const std::vector<std::string> &args)
+{
+  crypto::key_image key_image;
+  if (args.size() < 3)
+  {
+    fail_msg_writer() << tr("usage: set_ring <key_image> absolute|relative <index> [<index>...]");
+    return true;
+  }
+
+  if (!epee::string_tools::hex_to_pod(args[0], key_image))
+  {
+    fail_msg_writer() << tr("Invalid key image");
+    return true;
+  }
+
+  bool relative;
+  if (args[1] == "absolute")
+  {
+    relative = false;
+  }
+  else if (args[1] == "relative")
+  {
+    relative = true;
+  }
+  else
+  {
+    fail_msg_writer() << tr("Missing absolute or relative keyword");
+    return true;
+  }
+
+  std::vector<uint64_t> ring;
+  for (size_t n = 2; n < args.size(); ++n)
+  {
+    ring.resize(ring.size() + 1);
+    if (!string_tools::get_xtype_from_string(ring.back(), args[n]))
+    {
+      fail_msg_writer() << tr("invalid index: must be a strictly positive unsigned integer");
+      return true;
+    }
+    if (relative)
+    {
+      if (ring.size() > 1 && !ring.back())
+      {
+        fail_msg_writer() << tr("invalid index: must be a strictly positive unsigned integer");
+        return true;
+      }
+      uint64_t sum = 0;
+      for (uint64_t out: ring)
+      {
+        if (out > std::numeric_limits<uint64_t>::max() - sum)
+        {
+          fail_msg_writer() << tr("invalid index: indices wrap");
+          return true;
+        }
+        sum += out;
+      }
+    }
+    else
+    {
+      if (ring.size() > 1 && ring[ring.size() - 2] >= ring[ring.size() - 1])
+      {
+        fail_msg_writer() << tr("invalid index: indices should be in strictly ascending order");
+        return true;
+      }
+    }
+  }
+  if (!m_wallet->set_ring(key_image, ring, relative))
+  {
+    fail_msg_writer() << tr("failed to set ring");
+    return true;
+  }
+
+  return true;
+}
+
+bool simple_wallet::save_known_rings(const std::vector<std::string> &args)
+{
+  try
+  {
+    LOCK_IDLE_SCOPE();
+    m_wallet->find_and_save_rings();
+  }
+  catch (const std::exception &e)
+  {
+    fail_msg_writer() << tr("Failed to save known rings: ") << e.what();
+  }
+  return true;
+}
+
 bool simple_wallet::set_always_confirm_transfers(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
 {
   const auto pwd_container = get_and_verify_password();
@@ -1852,6 +1979,18 @@ simple_wallet::simple_wallet()
                            boost::bind(&simple_wallet::export_raw_multisig, this, _1),
                            tr("export_raw_multisig_tx <filename>"),
                            tr("Export a signed multisig transaction to a file"));
+  m_cmd_binder.set_handler("print_ring",
+                           boost::bind(&simple_wallet::print_ring, this, _1),
+                           tr("print_ring <key_image>"),
+                           tr("Print the ring used to spend a given key image (if the ring size is > 1)"));
+  m_cmd_binder.set_handler("set_ring",
+                           boost::bind(&simple_wallet::set_ring, this, _1),
+                           tr("set_ring <key_image> absolute|relative <index> [<index>...]"),
+                           tr("Set the ring used for a given key image, so it can be reused in a fork"));
+  m_cmd_binder.set_handler("save_known_rings",
+                           boost::bind(&simple_wallet::save_known_rings, this, _1),
+                           tr("save_known_rings"),
+                           tr("Save known rings to the shared rings database"));
   m_cmd_binder.set_handler("help",
                            boost::bind(&simple_wallet::help, this, _1),
                            tr("help [<command>]"),
