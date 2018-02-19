@@ -132,6 +132,8 @@ namespace cryptonote
     bool set_confirm_export_overwrite(const std::vector<std::string> &args = std::vector<std::string>());
     bool set_refresh_from_block_height(const std::vector<std::string> &args = std::vector<std::string>());
     bool set_auto_low_priority(const std::vector<std::string> &args = std::vector<std::string>());
+    bool set_segregate_pre_fork_outputs(const std::vector<std::string> &args = std::vector<std::string>());
+    bool set_segregate_post_fork_outputs(const std::vector<std::string> &args = std::vector<std::string>());
     bool help(const std::vector<std::string> &args = std::vector<std::string>());
     bool start_mining(const std::vector<std::string> &args);
     bool stop_mining(const std::vector<std::string> &args);

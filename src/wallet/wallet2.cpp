@@ -94,7 +94,9 @@ using namespace cryptonote;
 #define MULTISIG_UNSIGNED_TX_PREFIX "Monero multisig unsigned tx set\001"
 
 #define RECENT_OUTPUT_RATIO (0.5) // 50% of outputs are from the recent zone
-#define RECENT_OUTPUT_ZONE ((time_t)(1.8 * 86400)) // last 1.8 day makes up the recent zone (taken from monerolink.pdf, Miller et al)
+#define RECENT_OUTPUT_DAYS (1.8) // last 1.8 day makes up the recent zone (taken from monerolink.pdf, Miller et al)
+#define RECENT_OUTPUT_ZONE ((time_t)(RECENT_OUTPUT_DAYS * 86400))
+#define RECENT_OUTPUT_BLOCKS (RECENT_OUTPUT_DAYS * 720)
 
 #define FEE_ESTIMATE_GRACE_BLOCKS 10 // estimate fee valid for that many blocks
 
@@ -106,6 +108,10 @@ using namespace cryptonote;
 #define KEY_IMAGE_EXPORT_FILE_MAGIC "Monero key image export\002"
 
 #define MULTISIG_EXPORT_FILE_MAGIC "Monero multisig export\001"
+
+#define SEGREGATION_FORK_HEIGHT 1529810
+#define TESTNET_SEGREGATION_FORK_HEIGHT 1000000
+
 
 namespace
 {
@@ -637,6 +643,8 @@ wallet2::wallet2(bool testnet, bool restricted):
   m_confirm_backlog_threshold(0),
   m_confirm_export_overwrite(true),
   m_auto_low_priority(true),
+  m_segregate_pre_fork_outputs(true),
+  m_segregate_post_fork_outputs(true),
   m_is_initialized(false),
   m_restricted(restricted),
   is_old_file_format(false),
@@ -2556,6 +2564,12 @@ bool wallet2::store_keys(const std::string& keys_file_name, const epee::wipeable
 
   value2.SetInt(m_auto_low_priority ? 1 : 0);
   json.AddMember("auto_low_priority", value2, json.GetAllocator());
+
+  value2.SetInt(m_segregate_pre_fork_outputs ? 1 : 0);
+  json.AddMember("segregate_pre_fork_outputs", value2, json.GetAllocator());
+
+  value2.SetInt(m_segregate_post_fork_outputs ? 1 : 0);
+  json.AddMember("segregate_post_fork_outputs", value2, json.GetAllocator());
 
   value2.SetInt(m_testnet ? 1 :0);
   json.AddMember("testnet", value2, json.GetAllocator());
@@ -5621,6 +5635,49 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
     THROW_WALLET_EXCEPTION_IF(resp_t.result.status == CORE_RPC_STATUS_BUSY, error::daemon_busy, "get_output_histogram");
     THROW_WALLET_EXCEPTION_IF(resp_t.result.status != CORE_RPC_STATUS_OK, error::get_histogram_error, resp_t.result.status);
 
+    // if we want to segregate fake outs pre or post fork, get distribution
+    const uint64_t segregation_fork_height = m_testnet ? TESTNET_SEGREGATION_FORK_HEIGHT : SEGREGATION_FORK_HEIGHT;
+    std::map<uint64_t, std::pair<uint64_t, uint64_t>> segregation_limit;
+    if (m_segregate_pre_fork_outputs || m_segregate_post_fork_outputs)
+    {
+      cryptonote::COMMAND_RPC_GET_OUTPUT_DISTRIBUTION::request req_t = AUTO_VAL_INIT(req_t);
+      cryptonote::COMMAND_RPC_GET_OUTPUT_DISTRIBUTION::response resp_t = AUTO_VAL_INIT(resp_t);
+      for(size_t idx: selected_transfers)
+        req_t.amounts.push_back(m_transfers[idx].is_rct() ? 0 : m_transfers[idx].amount());
+      std::sort(req_t.amounts.begin(), req_t.amounts.end());
+      auto end = std::unique(req_t.amounts.begin(), req_t.amounts.end());
+      req_t.amounts.resize(std::distance(req_t.amounts.begin(), end));
+      m_daemon_rpc_mutex.lock();
+      bool r = net_utils::invoke_http_json_rpc("/json_rpc", "get_output_distribution", req_t, resp_t, m_http_client, rpc_timeout);
+      m_daemon_rpc_mutex.unlock();
+      THROW_WALLET_EXCEPTION_IF(!r, error::no_connection_to_daemon, "transfer_selected");
+      THROW_WALLET_EXCEPTION_IF(resp_t.status == CORE_RPC_STATUS_BUSY, error::daemon_busy, "get_output_distribution");
+      THROW_WALLET_EXCEPTION_IF(resp_t.status != CORE_RPC_STATUS_OK, error::get_output_distribution, resp_t.status);
+
+      // check we got all data
+      for(size_t idx: selected_transfers)
+      {
+        const uint64_t amount = m_transfers[idx].is_rct() ? 0 : m_transfers[idx].amount();
+        bool found = false;
+        for (const auto &d: resp_t.distributions)
+        {
+          if (d.amount == amount)
+          {
+            THROW_WALLET_EXCEPTION_IF(d.start_height >= segregation_fork_height, error::get_output_distribution, "Distribution start_height too high");
+            THROW_WALLET_EXCEPTION_IF(segregation_fork_height - d.start_height >= d.distribution.size(), error::get_output_distribution, "Distribution size too small");
+            THROW_WALLET_EXCEPTION_IF(segregation_fork_height <= RECENT_OUTPUT_BLOCKS, error::wallet_internal_error, "Fork height too low");
+            THROW_WALLET_EXCEPTION_IF(segregation_fork_height - RECENT_OUTPUT_BLOCKS < d.start_height, error::get_output_distribution, "Bad start height");
+            uint64_t till_fork = d.distribution[segregation_fork_height - d.start_height];
+            uint64_t recent = d.distribution[segregation_fork_height - d.start_height] - d.distribution[segregation_fork_height - RECENT_OUTPUT_BLOCKS - d.start_height];
+            segregation_limit[amount] = std::make_pair(till_fork, recent);
+            found = true;
+            break;
+          }
+        }
+        THROW_WALLET_EXCEPTION_IF(!found, error::get_output_distribution, "Requested amount not found in response");
+      }
+    }
+
     // we ask for more, to have spares if some outputs are still locked
     size_t base_requested_outputs_count = (size_t)((fake_outputs_count + 1) * 1.5 + 1);
     LOG_PRINT_L2("base_requested_outputs_count: " << base_requested_outputs_count);
@@ -5640,20 +5697,37 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
       size_t requested_outputs_count = base_requested_outputs_count + (td.is_rct() ? CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW - CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE : 0);
       size_t start = req.outputs.size();
 
-      // if there are just enough outputs to mix with, use all of them.
-      // Eventually this should become impossible.
       uint64_t num_outs = 0, num_recent_outs = 0;
-      for (const auto &he: resp_t.result.histogram)
+      if (m_segregate_pre_fork_outputs && td.m_block_height < segregation_fork_height)
       {
-        if (he.amount == amount)
+        num_outs = segregation_limit[amount].first;
+        num_recent_outs = segregation_limit[amount].second;
+      }
+      else
+      {
+        // if there are just enough outputs to mix with, use all of them.
+        // Eventually this should become impossible.
+        for (const auto &he: resp_t.result.histogram)
         {
-          LOG_PRINT_L2("Found " << print_money(amount) << ": " << he.total_instances << " total, "
-              << he.unlocked_instances << " unlocked, " << he.recent_instances << " recent");
-          num_outs = he.unlocked_instances;
-          num_recent_outs = he.recent_instances;
-          break;
+          if (he.amount == amount)
+          {
+            LOG_PRINT_L2("Found " << print_money(amount) << ": " << he.total_instances << " total, "
+                << he.unlocked_instances << " unlocked, " << he.recent_instances << " recent");
+            num_outs = he.unlocked_instances;
+            num_recent_outs = he.recent_instances;
+            break;
+          }
         }
       }
+
+      uint64_t output_offset = 0;
+      if (m_segregate_post_fork_outputs && td.m_block_height >= segregation_fork_height)
+      {
+        output_offset = segregation_limit[amount].first;
+        num_outs = num_outs >= output_offset ? num_outs - output_offset : 0;
+        num_recent_outs = num_recent_outs >= output_offset ? num_recent_outs - output_offset : 0;
+      }
+
       LOG_PRINT_L1("" << num_outs << " unlocked outputs of size " << print_money(amount));
       THROW_WALLET_EXCEPTION_IF(num_outs == 0, error::wallet_internal_error,
           "histogram reports no unlocked outputs for " + boost::lexical_cast<std::string>(amount) + ", not even ours");
@@ -5714,12 +5788,12 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
       if (num_outs <= requested_outputs_count && !existing_ring_found)
       {
         for (uint64_t i = 0; i < num_outs; i++)
-          req.outputs.push_back({amount, i});
+          req.outputs.push_back({amount, output_offset + i});
         // duplicate to make up shortfall: this will be caught after the RPC call,
         // so we can also output the amounts for which we can't reach the required
         // mixin after checking the actual unlockedness
         for (uint64_t i = num_outs; i < requested_outputs_count; ++i)
-          req.outputs.push_back({amount, num_outs - 1});
+          req.outputs.push_back({amount, output_offset + num_outs - 1});
       }
       else
       {
@@ -5753,6 +5827,7 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
             // just in case rounding up to 1 occurs after calc
             if (i == num_outs)
               --i;
+            i += output_offset;
             LOG_PRINT_L2("picking " << i << " as recent");
           }
           else
@@ -5764,6 +5839,7 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
             // just in case rounding up to 1 occurs after calc
             if (i == num_outs)
               --i;
+            i += output_offset;
             LOG_PRINT_L2("picking " << i << " as triangular");
           }
 
