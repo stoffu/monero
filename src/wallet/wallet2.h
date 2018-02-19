@@ -348,6 +348,7 @@ namespace tools
       std::unordered_set<rct::key> used_L;
       std::unordered_set<crypto::public_key> signing_keys;
       rct::multisig_out msout;
+      std::vector<std::vector<crypto::signature>> prerct_sigs;
     };
 
     // The convention for destinations is:
@@ -1244,7 +1245,7 @@ BOOST_CLASS_VERSION(tools::wallet2::unsigned_tx_set, 0)
 BOOST_CLASS_VERSION(tools::wallet2::signed_tx_set, 0)
 BOOST_CLASS_VERSION(tools::wallet2::tx_construction_data, 2)
 BOOST_CLASS_VERSION(tools::wallet2::pending_tx, 3)
-BOOST_CLASS_VERSION(tools::wallet2::multisig_sig, 0)
+BOOST_CLASS_VERSION(tools::wallet2::multisig_sig, 1)
 
 namespace boost
 {
@@ -1599,6 +1600,9 @@ namespace boost
       a & x.used_L;
       a & x.signing_keys;
       a & x.msout;
+      if (ver < 1)
+        return;
+      a & x.prerct_sigs;
     }
 
     template <class Archive>

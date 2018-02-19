@@ -123,6 +123,9 @@ namespace rct {
     rctSig genRct(const key &message, const ctkeyV & inSk, const ctkeyV  & inPk, const keyV & destinations, const std::vector<xmr_amount> & amounts, const keyV &amount_keys, const multisig_kLRki *kLRki, multisig_out *msout, const int mixin, hw::device &hwdev);
     rctSig genRctSimple(const key & message, const ctkeyV & inSk, const ctkeyV & inPk, const keyV & destinations, const std::vector<xmr_amount> & inamounts, const std::vector<xmr_amount> & outamounts, const keyV &amount_keys, const std::vector<multisig_kLRki> *kLRki, multisig_out *msout, xmr_amount txnFee, unsigned int mixin, hw::device &hwdev);
     rctSig genRctSimple(const key & message, const ctkeyV & inSk, const keyV & destinations, const std::vector<xmr_amount> & inamounts, const std::vector<xmr_amount> & outamounts, xmr_amount txnFee, const ctkeyM & mixRing, const keyV &amount_keys, const std::vector<multisig_kLRki> *kLRki, multisig_out *msout, const std::vector<unsigned int> & index, ctkeyV &outSk, bool bulletproof, hw::device &hwdev);
+
+    void gen_prerct_multisig(const crypto::hash &prefix_hash, const std::vector<const crypto::public_key *> &pubs, const crypto::secret_key &sec, size_t sec_index, const multisig_kLRki &kLRki, multisig_out &msout, size_t msout_idx, crypto::signature *sig);
+
     bool verRct(const rctSig & rv, bool semantics);
     static inline bool verRct(const rctSig & rv) { return verRct(rv, true) && verRct(rv, false); }
     bool verRctSimple(const rctSig & rv, bool semantics);
@@ -133,6 +136,7 @@ namespace rct {
     xmr_amount decodeRctSimple(const rctSig & rv, const key & sk, unsigned int i, hw::device &hwdev);
 
     bool signMultisig(rctSig &rv, const std::vector<unsigned int> &indices, const keyV &k, const multisig_out &msout, const key &secret_key);
+    bool signMultisig(std::vector<std::vector<crypto::signature>> &signatures, const std::vector<unsigned int> &indices, const keyV &k, const multisig_out &msout, const key &secret_key);
 }
 #endif  /* RCTSIGS_H */
 

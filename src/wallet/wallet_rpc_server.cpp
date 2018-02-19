@@ -2517,6 +2517,14 @@ namespace tools
   bool wallet_rpc_server::on_prepare_multisig(const wallet_rpc::COMMAND_RPC_PREPARE_MULTISIG::request& req, wallet_rpc::COMMAND_RPC_PREPARE_MULTISIG::response& res, epee::json_rpc::error& er)
   {
     if (!m_wallet) return not_open(er);
+
+    // comment out below if you want to use multisig with pre-ringct outputs which is unofficial
+    {
+      er.code = WALLET_RPC_ERROR_CODE_DENIED;
+      er.message = "Multisig for pre-RingCT is not supported officially";
+      return false;
+    }
+
     if (m_wallet->restricted())
     {
       er.code = WALLET_RPC_ERROR_CODE_DENIED;

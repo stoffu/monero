@@ -806,6 +806,12 @@ bool simple_wallet::print_fee_info(const std::vector<std::string> &args/* = std:
 
 bool simple_wallet::prepare_multisig(const std::vector<std::string> &args)
 {
+  // comment out below if you want to use multisig with pre-ringct outputs which is unofficial
+  {
+    fail_msg_writer() << tr("Multisig for pre-RingCT is not supported officially");
+    return true;
+  }
+
   if (m_wallet->key_on_device())
   {
     fail_msg_writer() << tr("command not supported by HW wallet");
