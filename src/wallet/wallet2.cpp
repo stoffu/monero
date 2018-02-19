@@ -4670,6 +4670,8 @@ bool wallet2::sign_multisig_tx(multisig_tx_set &exported_txs, std::vector<crypto
 
   txids.clear();
 
+  bool is_prerct;
+
   // sign the transactions
   for (size_t n = 0; n < exported_txs.m_ptx.size(); ++n)
   {
@@ -4678,6 +4680,20 @@ bool wallet2::sign_multisig_tx(multisig_tx_set &exported_txs, std::vector<crypto
     tools::wallet2::tx_construction_data &sd = ptx.construction_data;
     LOG_PRINT_L1(" " << (n+1) << ": " << sd.sources.size() << " inputs, mixin " << (sd.sources[0].outputs.size()-1) <<
         ", signed by " << exported_txs.m_signers.size() << "/" << m_multisig_threshold);
+
+    if (n == 0)
+    {
+      is_prerct = !exported_txs.m_ptx[0].multisig_sigs[0].prerct_sigs.empty();
+    }
+    if (is_prerct)
+    {
+      for (auto &sig: ptx.multisig_sigs)
+      {
+        THROW_WALLET_EXCEPTION_IF(sig.prerct_sigs.empty(), error::wallet_internal_error, "No pre-rct signature found in pre-rct multisig tx");
+        THROW_WALLET_EXCEPTION_IF(!sig.sigs.p.MGs.empty(), error::wallet_internal_error, "Rct signature found in pre-rct multisig tx");
+      }
+    }
+
     cryptonote::transaction tx;
     rct::multisig_out msout = ptx.multisig_sigs.front().msout;
     auto sources = sd.sources;
@@ -4697,7 +4713,14 @@ bool wallet2::sign_multisig_tx(multisig_tx_set &exported_txs, std::vector<crypto
     {
       if (sig.ignore != local_signer)
       {
-        ptx.tx.rct_signatures = sig.sigs;
+        if (is_prerct)
+        {
+          ptx.tx.signatures = sig.prerct_sigs;
+        }
+        else
+        {
+          ptx.tx.rct_signatures = sig.sigs;
+        }
 
         rct::keyV k;
         for (size_t idx: sd.selected_transfers)
@@ -4714,10 +4737,21 @@ bool wallet2::sign_multisig_tx(multisig_tx_set &exported_txs, std::vector<crypto
             sig.signing_keys.insert(pmsk);
           }
         }
-        THROW_WALLET_EXCEPTION_IF(!rct::signMultisig(ptx.tx.rct_signatures, indices, k, sig.msout, skey),
-            error::wallet_internal_error, "Failed signing, transaction likely malformed");
 
-        sig.sigs = ptx.tx.rct_signatures;
+        bool r = is_prerct ?
+          rct::signMultisig(ptx.tx.signatures, indices, k, sig.msout, skey) :
+          rct::signMultisig(ptx.tx.rct_signatures, indices, k, sig.msout, skey);
+
+        THROW_WALLET_EXCEPTION_IF(!r, error::wallet_internal_error, "Failed signing, transaction likely malformed");
+
+        if (is_prerct)
+        {
+          sig.prerct_sigs = ptx.tx.signatures;
+        }
+        else
+        {
+          sig.sigs = ptx.tx.rct_signatures;
+        }
       }
     }
 
@@ -5331,6 +5365,7 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
   // throw if attempting a transaction with no destinations
   THROW_WALLET_EXCEPTION_IF(dsts.empty(), error::zero_destination);
 
+  // comment out below line if you want to use multisig with pre-ringct outputs which is unofficial
   THROW_WALLET_EXCEPTION_IF(m_multisig, error::wallet_internal_error, "Multisig wallets cannot spend non rct outputs");
 
   uint64_t upper_transaction_size_limit = get_upper_transaction_size_limit();
@@ -5345,6 +5380,36 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
     needed_money += dt.amount;
     LOG_PRINT_L2("transfer: adding " << print_money(dt.amount) << ", for a total of " << print_money (needed_money));
     THROW_WALLET_EXCEPTION_IF(needed_money < dt.amount, error::tx_sum_overflow, dsts, fee, m_testnet);
+  }
+
+  // if this is a multisig wallet, create a list of multisig signers we can use
+  std::deque<crypto::public_key> multisig_signers;
+  size_t n_multisig_txes = 0;
+  if (m_multisig && !m_transfers.empty())
+  {
+    const crypto::public_key local_signer = get_multisig_signer_public_key();
+    size_t n_available_signers = 1;
+    for (const crypto::public_key &signer: m_multisig_signers)
+    {
+      if (signer == local_signer)
+        continue;
+      multisig_signers.push_front(signer);
+      for (const auto &i: m_transfers[0].m_multisig_info)
+      {
+        if (i.m_signer == signer)
+        {
+          multisig_signers.pop_front();
+          multisig_signers.push_back(signer);
+          ++n_available_signers;
+          break;
+        }
+      }
+    }
+    multisig_signers.push_back(local_signer);
+    MDEBUG("We can use " << n_available_signers << "/" << m_multisig_signers.size() <<  " other signers");
+    THROW_WALLET_EXCEPTION_IF(n_available_signers+1 < m_multisig_threshold, error::multisig_import_needed);
+    n_multisig_txes = n_available_signers == m_multisig_signers.size() ? m_multisig_threshold : 1;
+    MDEBUG("We will create " << n_multisig_txes << " txes");
   }
 
   uint64_t found_money = 0;
@@ -5368,6 +5433,7 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
   typedef cryptonote::tx_source_entry::output_entry tx_output_entry;
   size_t i = 0, out_index = 0;
   std::vector<cryptonote::tx_source_entry> sources;
+  std::unordered_set<rct::key> used_L;
   for(size_t idx: selected_transfers)
   {
     sources.resize(sources.size()+1);
@@ -5405,7 +5471,15 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
     src.real_out_additional_tx_keys = get_additional_tx_pub_keys_from_extra(td.m_tx);
     src.real_output = it_to_replace - src.outputs.begin();
     src.real_output_in_tx_index = td.m_internal_output_index;
-    src.multisig_kLRki = rct::multisig_kLRki({rct::zero(), rct::zero(), rct::zero(), rct::zero()});
+    if (m_multisig)
+    {
+      crypto::public_key ignore = m_multisig_threshold == m_multisig_signers.size() ? crypto::null_pkey : multisig_signers.front();
+      src.multisig_kLRki = get_multisig_composite_kLRki(idx, ignore, used_L, used_L);
+    }
+    else
+    {
+      src.multisig_kLRki = rct::multisig_kLRki({rct::zero(), rct::zero(), rct::zero(), rct::zero()});
+    }
     detail::print_source_entry(src);
     ++out_index;
   }
@@ -5435,10 +5509,64 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
   std::vector<crypto::secret_key> additional_tx_keys;
   rct::multisig_out msout;
   LOG_PRINT_L2("constructing tx");
+  auto sources_copy = sources;
   bool r = cryptonote::construct_tx_and_get_tx_key(m_account.get_keys(), m_subaddresses, sources, splitted_dsts, change_dts.addr, extra, tx, unlock_time, tx_key, additional_tx_keys, false, false, m_multisig ? &msout : NULL);
   LOG_PRINT_L2("constructed tx, r="<<r);
   THROW_WALLET_EXCEPTION_IF(!r, error::tx_not_constructed, sources, splitted_dsts, unlock_time, m_testnet);
   THROW_WALLET_EXCEPTION_IF(upper_transaction_size_limit <= get_object_blobsize(tx), error::tx_too_big, tx, upper_transaction_size_limit);
+
+  // work out the permutation done on sources
+  std::vector<size_t> ins_order;
+  for (size_t n = 0; n < sources.size(); ++n)
+  {
+    for (size_t idx = 0; idx < sources_copy.size(); ++idx)
+    {
+      THROW_WALLET_EXCEPTION_IF((size_t)sources_copy[idx].real_output >= sources_copy[idx].outputs.size(),
+          error::wallet_internal_error, "Invalid real_output");
+      if (sources_copy[idx].outputs[sources_copy[idx].real_output].second.dest == sources[n].outputs[sources[n].real_output].second.dest)
+        ins_order.push_back(idx);
+    }
+  }
+  THROW_WALLET_EXCEPTION_IF(ins_order.size() != sources.size(), error::wallet_internal_error, "Failed to work out sources permutation");
+
+  std::vector<tools::wallet2::multisig_sig> multisig_sigs;
+  if (m_multisig)
+  {
+    crypto::public_key ignore = m_multisig_threshold == m_multisig_signers.size() ? crypto::null_pkey : multisig_signers.front();
+    multisig_sigs.push_back({rct::rctSig{}, ignore, used_L, {}, msout, tx.signatures});
+
+    if (m_multisig_threshold < m_multisig_signers.size())
+    {
+      const crypto::hash prefix_hash = cryptonote::get_transaction_prefix_hash(tx);
+
+      // create the other versions, one for every other participant (the first one's already done above)
+      for (size_t signer_index = 1; signer_index < n_multisig_txes; ++signer_index)
+      {
+        std::unordered_set<rct::key> new_used_L;
+        size_t src_idx = 0;
+        THROW_WALLET_EXCEPTION_IF(selected_transfers.size() != sources.size(), error::wallet_internal_error, "mismatched selected_transfers and sources sixes");
+        for(size_t idx: selected_transfers)
+        {
+          cryptonote::tx_source_entry& src = sources[src_idx];
+          src.multisig_kLRki = get_multisig_composite_kLRki(idx, multisig_signers[signer_index], used_L, new_used_L);
+          ++src_idx;
+        }
+
+        LOG_PRINT_L2("Creating supplementary multisig transaction");
+        cryptonote::transaction ms_tx;
+        auto sources_copy_copy = sources_copy;
+        bool r = cryptonote::construct_tx_with_tx_key(m_account.get_keys(), m_subaddresses, sources_copy_copy, splitted_dsts, change_dts.addr, extra, ms_tx, unlock_time,tx_key, additional_tx_keys, false, false, &msout);
+        LOG_PRINT_L2("constructed tx, r="<<r);
+        THROW_WALLET_EXCEPTION_IF(!r, error::tx_not_constructed, sources, splitted_dsts, unlock_time, m_testnet);
+        THROW_WALLET_EXCEPTION_IF(upper_transaction_size_limit <= get_object_blobsize(tx), error::tx_too_big, tx, upper_transaction_size_limit);
+        THROW_WALLET_EXCEPTION_IF(cryptonote::get_transaction_prefix_hash(ms_tx) != prefix_hash, error::wallet_internal_error, "Multisig txes do not share prefix");
+        multisig_sigs.push_back({rct::rctSig{}, multisig_signers[signer_index], new_used_L, {}, msout, ms_tx.signatures});
+
+        ms_tx.signatures = tx.signatures;
+        THROW_WALLET_EXCEPTION_IF(cryptonote::get_transaction_hash(ms_tx) != cryptonote::get_transaction_hash(tx), error::wallet_internal_error, "Multisig txes differ by more than the signatures");
+      }
+    }
+  }
 
   std::string key_images;
   bool all_are_txin_to_key = std::all_of(tx.vin.begin(), tx.vin.end(), [&](const txin_v& s_e) -> bool
@@ -5462,13 +5590,15 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
   ptx.tx = tx;
   ptx.change_dts = change_dts;
   ptx.selected_transfers = selected_transfers;
+  tools::apply_permutation(ins_order, ptx.selected_transfers);
   ptx.tx_key = tx_key;
   ptx.additional_tx_keys = additional_tx_keys;
   ptx.dests = dsts;
-  ptx.construction_data.sources = sources;
+  ptx.multisig_sigs = multisig_sigs;
+  ptx.construction_data.sources = sources_copy;
   ptx.construction_data.change_dts = change_dts;
   ptx.construction_data.splitted_dsts = splitted_dsts;
-  ptx.construction_data.selected_transfers = selected_transfers;
+  ptx.construction_data.selected_transfers = ptx.selected_transfers;
   ptx.construction_data.extra = tx.extra;
   ptx.construction_data.unlock_time = unlock_time;
   ptx.construction_data.use_rct = false;
