@@ -2072,6 +2072,35 @@ namespace cryptonote
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_get_output_distribution(const COMMAND_RPC_GET_OUTPUT_DISTRIBUTION::request& req, COMMAND_RPC_GET_OUTPUT_DISTRIBUTION::response& res, epee::json_rpc::error& error_resp)
+  {
+    try
+    {
+      for (uint64_t amount: req.amounts)
+      {
+        std::vector<uint64_t> distribution;
+        uint64_t start_height;
+        if (!m_core.get_output_distribution(amount, start_height, distribution))
+        {
+          error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
+          error_resp.message = "Failed to get rct distribution";
+          return false;
+        }
+        res.distributions.push_back({amount, start_height, distribution});
+      }
+    }
+    catch (const std::exception &e)
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
+      error_resp.message = "Failed to get output distribution";
+      return false;
+    }
+
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
+
 
   const command_line::arg_descriptor<std::string, false, true> core_rpc_server::arg_rpc_bind_port = {
       "rpc-bind-port"

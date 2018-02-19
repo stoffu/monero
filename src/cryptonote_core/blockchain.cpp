@@ -1894,6 +1894,29 @@ void Blockchain::get_output_key_mask_unlocked(const uint64_t& amount, const uint
   unlocked = is_tx_spendtime_unlocked(m_db->get_tx_unlock_time(toi.first));
 }
 //------------------------------------------------------------------
+bool Blockchain::get_output_distribution(uint64_t amount, uint64_t &start_height, std::vector<uint64_t> &distribution) const
+{
+  // rct outputs don't exist before v3
+  if (amount == 0)
+    start_height = m_testnet ? testnet_hard_forks[2].height : mainnet_hard_forks[2].height;
+  else
+    start_height = 0;
+
+  distribution.clear();
+  uint64_t db_height = m_db->height();
+  distribution.resize(db_height - start_height, 0);
+  bool r = for_all_outputs(amount, [&](uint64_t height) {
+    CHECK_AND_ASSERT_MES(height >= start_height && height <= db_height, false, "Height not in expected range");
+    distribution[height - start_height]++;
+    return true;
+  });
+  if (!r)
+    return false;
+  for (size_t n = 1; n < distribution.size(); ++n)
+    distribution[n] += distribution[n-1];
+  return true;
+}
+//------------------------------------------------------------------
 // This function takes a list of block hashes from another node
 // on the network to find where the split point is between us and them.
 // This is used to see what to send another node that needs to sync.
@@ -4427,9 +4450,14 @@ bool Blockchain::for_all_transactions(std::function<bool(const crypto::hash&, co
   return m_db->for_all_transactions(f);
 }
 
-bool Blockchain::for_all_outputs(std::function<bool(uint64_t amount, const crypto::hash &tx_hash, size_t tx_idx)> f) const
+bool Blockchain::for_all_outputs(std::function<bool(uint64_t amount, const crypto::hash &tx_hash, uint64_t height, size_t tx_idx)> f) const
 {
   return m_db->for_all_outputs(f);;
+}
+
+bool Blockchain::for_all_outputs(uint64_t amount, std::function<bool(uint64_t height)> f) const
+{
+  return m_db->for_all_outputs(amount, f);;
 }
 
 namespace cryptonote {

@@ -570,6 +570,12 @@ namespace cryptonote
       */
      bool get_random_rct_outs(const COMMAND_RPC_GET_RANDOM_RCT_OUTPUTS::request& req, COMMAND_RPC_GET_RANDOM_RCT_OUTPUTS::response& res) const;
 
+     /**
+      * @copydoc Blockchain::get_output_distribution
+      *
+      * @brief get per block distribution of outputs of a given amount
+      */
+     bool get_output_distribution(uint64_t amount, uint64_t &start_height, std::vector<uint64_t> &distribution) const;
 
      /**
       * @copydoc miner::pause
