@@ -1,4 +1,4 @@
-# Copyright (c) 2014-2018, The Monero Project
+# Copyright (c) 2014-2017, The Monero Project
 #
 # All rights reserved.
 #
@@ -26,20 +26,23 @@
 # STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-set(cryptonote_core_sources
-  blockchain.cpp
-  cryptonote_core.cpp
-  tx_pool.cpp
-  cryptonote_tx_utils.cpp)
+set(device_sources
+  device.cpp
+  device_default.cpp
+  device_ledger.cpp
+  log.cpp
+  )
 
-set(cryptonote_core_headers)
+set(device_headers
+  device_declare.hpp
+  device.hpp
+  device_default.hpp
+  device_ledger.hpp
+  log.hpp
+ )
 
-set(cryptonote_core_private_headers
-  blockchain_storage_boost_serialization.h
-  blockchain.h
-  cryptonote_core.h
-  tx_pool.h
-  cryptonote_tx_utils.h)
+set(device_private_headers)
+
 
 if(PER_BLOCK_CHECKPOINT)
   set(Blocks "blocks")
@@ -47,28 +50,21 @@ else()
   set(Blocks "")
 endif()
 
-monero_private_headers(cryptonote_core
-  ${cryptonote_core_private_headers}
-  ${crypto_private_headers})
-monero_add_library(cryptonote_core
-  ${cryptonote_core_sources}
-  ${cryptonote_core_headers}
-  ${cryptonote_core_private_headers})
-target_link_libraries(cryptonote_core
+monero_private_headers(device
+  ${device_private_headers})
+
+monero_add_library(device
+  ${device_sources}
+  ${device_headers}
+  ${device_private_headers})
+
+target_link_libraries(device
   PUBLIC
-    version
-    common
-    cncrypto
-    blockchain_db
-    multisig
+    pcsclite
+    crypto
     ringct
-    device
-    ${Boost_DATE_TIME_LIBRARY}
-    ${Boost_PROGRAM_OPTIONS_LIBRARY}
-    ${Boost_SERIALIZATION_LIBRARY}
-    ${Boost_FILESYSTEM_LIBRARY}
-    ${Boost_SYSTEM_LIBRARY}
-    ${Boost_THREAD_LIBRARY}
+    ${GNU_READLINE_LIBRARY}
+    ${EPEE_READLINE}
   PRIVATE
     ${Blocks}
     ${EXTRA_LIBRARIES})

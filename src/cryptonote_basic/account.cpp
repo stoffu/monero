@@ -40,6 +40,7 @@ extern "C"
 }
 #include "cryptonote_basic_impl.h"
 #include "cryptonote_format_utils.h"
+#include "device/device.hpp"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "account"
@@ -50,6 +51,25 @@ DISABLE_VS_WARNINGS(4244 4345)
 
   namespace cryptonote
 {
+ account_keys& account_keys::operator=(const account_keys &keys) {
+      m_account_address  = keys.m_account_address;
+      m_spend_secret_key = keys.m_spend_secret_key;
+      m_view_secret_key  = keys.m_view_secret_key;
+      m_multisig_keys    = keys.m_multisig_keys;
+      m_device           = keys.m_device;
+      return *this;
+    }
+  //-----------------------------------------------------------------
+  hw::Device& account_keys::get_device() const {
+    return *m_device;
+  }
+  //-----------------------------------------------------------------
+  void account_keys::set_device( hw::Device &device)  {
+    m_device = &device;
+    MCDEBUG("ledger", "account_keys::set_device device type: "<<typeid(device).name());
+    MCDEBUG("ledger", "account_keys::set_device m_device type: "<<typeid(*m_device).name());
+  }
+
   //-----------------------------------------------------------------
   account_base::account_base()
   {
@@ -116,6 +136,34 @@ DISABLE_VS_WARNINGS(4244 4345)
     if (m_creation_timestamp == (uint64_t)-1) // failure
       m_creation_timestamp = 0; // lowest value
   }
+
+  //-----------------------------------------------------------------
+  void account_base::create_from_device(const std::string &device_name)
+  {
+
+    hw::Device &device =  hw::get_device("ledger");// m_keys.get_device();
+    m_keys.set_device(device);
+    device.set_name(device_name);
+    MCDEBUG("ledger", "device type: "<<typeid(device).name());
+    device.init();
+    device.connect();
+    device.get_public_address(m_keys.m_account_address);
+    #ifdef DEBUGLEDGER
+    device.get_secret_keys(m_keys.m_view_secret_key, m_keys.m_spend_secret_key);
+    #endif
+    struct tm timestamp = {0};
+    timestamp.tm_year = 2014 - 1900;  // year 2014
+    timestamp.tm_mon = 4 - 1;  // month april
+    timestamp.tm_mday = 15;  // 15th of april
+    timestamp.tm_hour = 0;
+    timestamp.tm_min = 0;
+    timestamp.tm_sec = 0;
+
+    m_creation_timestamp = mktime(&timestamp);
+    if (m_creation_timestamp == (uint64_t)-1) // failure
+      m_creation_timestamp = 0; // lowest value
+  }
+
   //-----------------------------------------------------------------
   void account_base::create_from_viewkey(const cryptonote::account_public_address& address, const crypto::secret_key& viewkey)
   {

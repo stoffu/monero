@@ -47,6 +47,7 @@
 #include "wallet/wallet2.h"
 #include "gtest/gtest.h"
 #include "unit_tests_utils.h"
+#include "device/device.hpp"
 using namespace std;
 using namespace crypto;
 
@@ -590,7 +591,7 @@ TEST(Serialization, serializes_ringct_types)
   rct::skpkGen(Sk, Pk);
   destinations.push_back(Pk);
   //compute rct data with mixin 500
-  s0 = rct::genRct(rct::zero(), sc, pc, destinations, amounts, amount_keys, NULL, NULL, 3);
+  s0 = rct::genRct(rct::zero(), sc, pc, destinations, amounts, amount_keys, NULL, NULL, 3, hw::get_device("default"));
 
   mg0 = s0.p.MGs[0];
   ASSERT_TRUE(serialization::dump_binary(mg0, blob));
@@ -684,7 +685,7 @@ TEST(Serialization, portability_wallet)
   {}
   ASSERT_TRUE(r);
   /*
-  fields of tools::wallet2 to be checked: 
+  fields of tools::wallet2 to be checked:
     std::vector<crypto::hash>                                       m_blockchain
     std::vector<transfer_details>                                   m_transfers               // TODO
     cryptonote::account_public_address                              m_account_public_address
@@ -847,7 +848,7 @@ TEST(Serialization, portability_outputs)
   {}
   ASSERT_TRUE(r);
   /*
-  fields of tools::wallet2::transfer_details to be checked: 
+  fields of tools::wallet2::transfer_details to be checked:
     uint64_t                        m_block_height
     cryptonote::transaction_prefix  m_tx                        // TODO
     crypto::hash                    m_txid
@@ -924,7 +925,7 @@ TEST(Serialization, portability_unsigned_tx)
     ar >> exported_txs;
     r = true;
   }
-  catch (...)  
+  catch (...)
   {}
   ASSERT_TRUE(r);
   /*
@@ -941,7 +942,7 @@ TEST(Serialization, portability_unsigned_tx)
     uint64_t                                      unlock_time
     bool                                          use_rct
     std::vector<cryptonote::tx_destination_entry> dests
-  
+
   fields of cryptonote::tx_source_entry to be checked:
     std::vector<std::pair<uint64_t, rct::ctkey>>  outputs
     size_t                                        real_output
@@ -950,7 +951,7 @@ TEST(Serialization, portability_unsigned_tx)
     uint64_t                                      amount
     bool                                          rct
     rct::key                                      mask
-  
+
   fields of cryptonote::tx_destination_entry to be checked:
     uint64_t                amount
     account_public_address  addr
@@ -981,7 +982,7 @@ TEST(Serialization, portability_unsigned_tx)
   // tcd.sources[0].{real_output, real_out_tx_key, real_output_in_tx_index, amount, rct, mask}
   ASSERT_TRUE(tse.real_output == 4);
   ASSERT_TRUE(epee::string_tools::pod_to_hex(tse.real_out_tx_key) == "4d86c7ba1c285fe4bc1cd7b54ba894fa89fa02fc6b0bbeea67d53251acd14a05");
-  ASSERT_TRUE(tse.real_output_in_tx_index == 1); 
+  ASSERT_TRUE(tse.real_output_in_tx_index == 1);
   ASSERT_TRUE(tse.amount == 11066009260865);
   ASSERT_TRUE(tse.rct);
   ASSERT_TRUE(epee::string_tools::pod_to_hex(tse.mask) == "789bafff169ef206aa21219342c69ca52ce1d78d776c10b21d14bdd960fc7703");
@@ -1079,7 +1080,7 @@ TEST(Serialization, portability_signed_tx)
   fields of tools::wallet2::signed_tx_set to be checked:
     std::vector<pending_tx>         ptx
     std::vector<crypto::key_image>  key_images
-  
+
   fields of tools::walllet2::pending_tx to be checked:
     cryptonote::transaction                       tx                  // TODO
     uint64_t                                      dust
@@ -1136,7 +1137,7 @@ TEST(Serialization, portability_signed_tx)
   // ptx.construction_data.sources[0].{real_output, real_out_tx_key, real_output_in_tx_index, amount, rct, mask}
   ASSERT_TRUE(tse.real_output == 4);
   ASSERT_TRUE(epee::string_tools::pod_to_hex(tse.real_out_tx_key) == "4d86c7ba1c285fe4bc1cd7b54ba894fa89fa02fc6b0bbeea67d53251acd14a05");
-  ASSERT_TRUE(tse.real_output_in_tx_index == 1); 
+  ASSERT_TRUE(tse.real_output_in_tx_index == 1);
   ASSERT_TRUE(tse.amount == 11066009260865);
   ASSERT_TRUE(tse.rct);
   ASSERT_TRUE(epee::string_tools::pod_to_hex(tse.mask) == "789bafff169ef206aa21219342c69ca52ce1d78d776c10b21d14bdd960fc7703");

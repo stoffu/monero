@@ -52,6 +52,7 @@ target_link_libraries(ringct
     common
     cncrypto
     cryptonote_basic
+    device
   PRIVATE
     ${OPENSSL_LIBRARIES}
     ${EXTRA_LIBRARIES})

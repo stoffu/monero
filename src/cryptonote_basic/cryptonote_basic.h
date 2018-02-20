@@ -434,6 +434,12 @@ namespace cryptonote
       generate_keys(k.pub, k.sec);
       return k;
     }
+    static inline keypair generate(hw::Device& device)
+    {
+      keypair k;
+      generate_keys(k.pub, k.sec, device);
+      return k;
+    }
   };
   //---------------------------------------------------------------
 
