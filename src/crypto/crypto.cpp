@@ -130,6 +130,7 @@ namespace crypto {
 
     ge_scalarmult_base(&point, &sec);
     ge_p3_tobytes(&pub, &point);
+
     return rng;
   }
   secret_key generate_keys(public_key &pub, secret_key &sec, const secret_key& recovery_key, bool recover, hw::Device &device) {
@@ -189,7 +190,6 @@ namespace crypto {
     tools::write_varint(end, output_index);
     assert(end <= buf.output_index + sizeof buf.output_index);
     hash_to_scalar(&buf, end - reinterpret_cast<char *>(&buf), res);
-
   }
   void derivation_to_scalar(const key_derivation &derivation, size_t output_index, ec_scalar &res, hw::Device &device) {
     device.derivation_to_scalar(derivation, output_index, res);
@@ -197,7 +197,7 @@ namespace crypto {
 
 
   bool crypto_ops::derive_public_key(const key_derivation &derivation, size_t output_index,
-                                     const public_key &base, public_key &derived_key) {
+    const public_key &base, public_key &derived_key) {
     crypto::ec_scalar scalar;
     ge_p3 point1;
     ge_p3 point2;

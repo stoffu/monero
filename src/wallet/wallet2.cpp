@@ -8559,6 +8559,7 @@ crypto::public_key wallet2::get_tx_pub_key_from_received_outs(const tools::walle
   const cryptonote::account_keys& keys = m_account.get_keys();
   size_t pk_index = 0;
   hw::Device &device = m_account.get_device();
+
   const std::vector<crypto::public_key> additional_tx_pub_keys = get_additional_tx_pub_keys_from_extra(td.m_tx);
   std::vector<crypto::key_derivation> additional_derivations;
   for (size_t i = 0; i < additional_tx_pub_keys.size(); ++i)
@@ -8606,7 +8607,7 @@ bool wallet2::export_key_images(const std::string &filename) const
 
   // encrypt data, keep magic plaintext
   std::string ciphertext = encrypt_with_view_secret_key(data);
-  return epee::file_io_utils::save_string_to_file(filename, magic + ciphertext);
+  return epee::file_io_utils::save_string_to_file(filename, magic + ciphertext);    
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -8859,7 +8860,6 @@ uint64_t wallet2::import_key_images(const std::vector<std::pair<crypto::key_imag
       uint64_t tx_money_got_in_outs = 0;
       const cryptonote::account_keys& keys = m_account.get_keys();
       const crypto::public_key tx_pub_key = get_tx_pub_key_from_extra(spent_tx);
-
       crypto::key_derivation derivation;
       bool r = generate_key_derivation(tx_pub_key, keys.m_view_secret_key, derivation, device);
       THROW_WALLET_EXCEPTION_IF(!r, error::wallet_internal_error, "Failed to generate key derivation");

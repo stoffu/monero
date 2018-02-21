@@ -927,7 +927,7 @@ using ::std::tuple_size;
 #  define GTEST_API_ __declspec(dllexport)
 # endif
 #elif __GNUC__ >= 4 || defined(__clang__)
-# define GTEST_API_ __attribute__((visibility (("default"))))
+# define GTEST_API_ __attribute__((visibility ("default")))
 #endif // _MSC_VER
 
 #ifndef GTEST_API_

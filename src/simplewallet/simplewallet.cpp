@@ -2898,8 +2898,6 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
 
   return true;
 }
-
-
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     const std::string &multisig_keys, const std::string &old_language)
@@ -3121,7 +3119,7 @@ bool simple_wallet::start_mining(const std::vector<std::string>& args)
     fail_msg_writer() << tr("wallet is null");
     return true;
   }
-  COMMAND_RPC_START_MINING::request req = AUTO_VAL_INIT(req);
+  COMMAND_RPC_START_MINING::request req = AUTO_VAL_INIT(req); 
   req.miner_address = m_wallet->get_account().get_public_address_str(m_wallet->testnet());
 
   bool ok = true;
@@ -5227,6 +5225,7 @@ bool simple_wallet::get_spend_proof(const std::vector<std::string> &args)
     fail_msg_writer() << tr("usage: get_spend_proof <txid> [<message>]");
     return true;
   }
+
   if (m_wallet->watch_only())
   {
     fail_msg_writer() << tr("wallet is watch-only and cannot generate the proof");
@@ -5316,6 +5315,7 @@ bool simple_wallet::get_reserve_proof(const std::vector<std::string> &args)
     fail_msg_writer() << tr("usage: get_reserve_proof (all|<amount>) [<message>]");
     return true;
   }
+
   if (m_wallet->watch_only() || m_wallet->multisig())
   {
     fail_msg_writer() << tr("The reserve proof can be generated only by a full wallet");

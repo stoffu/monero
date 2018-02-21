@@ -184,7 +184,6 @@ namespace rct {
         return aG;
     }
 
-
     //does a * P where a is a scalar and P is an arbitrary point
     void scalarmultKey(key & aP, const key &P, const key &a) {
         ge_p3 A;
@@ -471,7 +470,6 @@ namespace rct {
     void ecdhEncode(ecdhTuple & unmasked, const key & sharedSec, hw::Device &device) {
         device.ecdhEncode(sharedSec, unmasked);
     }
-
     void ecdhDecode(ecdhTuple & masked, const key & sharedSec) {
         rct::key sharedSec1 = rct::hash_to_scalar(sharedSec);
         rct::key sharedSec2 = rct::hash_to_scalar(sharedSec1);

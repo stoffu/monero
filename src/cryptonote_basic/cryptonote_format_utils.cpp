@@ -249,7 +249,7 @@ namespace cryptonote
     for (size_t i = 0; i < additional_tx_public_keys.size(); ++i)
     {
       crypto::key_derivation additional_recv_derivation = AUTO_VAL_INIT(additional_recv_derivation);
-      bool r = crypto::generate_key_derivation(additional_tx_public_keys[i], ack.m_view_secret_key, additional_recv_derivation, device);
+      r = crypto::generate_key_derivation(additional_tx_public_keys[i], ack.m_view_secret_key, additional_recv_derivation, device);
       CHECK_AND_ASSERT_MES(r, false, "key image helper: failed to generate_key_derivation(" << additional_tx_public_keys[i] << ", " << ack.m_view_secret_key << ")");
       additional_recv_derivations.push_back(additional_recv_derivation);
     }
@@ -580,13 +580,17 @@ namespace cryptonote
     crypto::key_derivation derivation;
     crypto::hash hash;
     char data[33]; /* A hash, and an extra byte */
+
     if (!generate_key_derivation(public_key, secret_key, derivation))
       return false;
+
     memcpy(data, &derivation, 32);
     data[32] = ENCRYPTED_PAYMENT_ID_TAIL;
     cn_fast_hash(data, 33, hash);
+
     for (size_t b = 0; b < 8; ++b)
       payment_id.data[b] ^= hash.data[b];
+
     return true;
   }
   bool decrypt_payment_id(crypto::hash8 &payment_id, const crypto::public_key &public_key, const crypto::secret_key &secret_key)

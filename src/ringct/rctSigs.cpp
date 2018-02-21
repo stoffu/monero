@@ -716,7 +716,6 @@ namespace rct {
         ctkeyV outSk;
         tie(mixRing, index) = populateFromBlockchain(inPk, mixin);
         return genRct(message, inSk, destinations, amounts, mixRing, amount_keys, kLRki, msout, index, outSk, false, device);
-
     }
     
     //RCT simple    
