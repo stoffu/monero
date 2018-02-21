@@ -39,12 +39,17 @@ namespace hw {
         /*                               SUB ADDRESS                               */
         /* ======================================================================= */
 
-        bool DeviceDefault::derive_subaddress_public_key(const crypto::public_key &out_key, const crypto::key_derivation &derivation, const std::size_t output_index, crypto::public_key &derived_key){
+        bool DeviceDefault::derive_subaddress_public_key(const crypto::public_key &out_key, const crypto::key_derivation &derivation, const std::size_t output_index, crypto::public_key &derived_key) {
             return crypto::derive_subaddress_public_key(out_key, derivation, output_index,derived_key);
         }
 
         bool DeviceDefault::get_subaddress_spend_public_key(const cryptonote::account_keys& keys, const cryptonote::subaddress_index &index, crypto::public_key &D) {
             D = cryptonote::get_subaddress_spend_public_key(keys,index);
+            return true;
+        }
+
+        bool  DeviceDefault::get_subaddress_spend_public_keys(const cryptonote::account_keys &keys, uint32_t account, uint32_t begin, uint32_t end, std::vector<crypto::public_key> &pkeys) {
+            pkeys = cryptonote::get_subaddress_spend_public_keys(keys, account, begin, end);
             return true;
         }
 

@@ -604,6 +604,17 @@ namespace hw {
       return true;
     }
 
+    bool  DeviceLedger::get_subaddress_spend_public_keys(const cryptonote::account_keys &keys, uint32_t account, uint32_t begin, uint32_t end, std::vector<crypto::public_key> &pkeys) {
+     cryptonote::subaddress_index index = {account, begin};
+     crypto::public_key D;
+     for (uint32_t idx = begin; idx < end; ++idx) {
+        index.minor = idx;
+        this->get_subaddress_spend_public_key(keys, index, D);
+        pkeys.push_back(D);
+      }
+      return true;
+    }
+
     bool DeviceLedger::get_subaddress(const cryptonote::account_keys& keys, const cryptonote::subaddress_index &index, cryptonote::account_public_address &address) {
       lock_device();
       try {
@@ -1564,7 +1575,7 @@ namespace hw {
         #endif
 
         data = blob.data();
-        
+
         // ======  u8 type, varint txnfee ======
         int offset;
 

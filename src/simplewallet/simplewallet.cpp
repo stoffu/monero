@@ -5218,11 +5218,15 @@ bool simple_wallet::check_tx_proof(const std::vector<std::string> &args)
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::get_spend_proof(const std::vector<std::string> &args)
 {
+  if (m_wallet->key_on_device())
+  {
+    fail_msg_writer() << tr("command not supported by HW wallet");
+    return true;
+  }
   if(args.size() != 1 && args.size() != 2) {
     fail_msg_writer() << tr("usage: get_spend_proof <txid> [<message>]");
     return true;
   }
-
   if (m_wallet->watch_only())
   {
     fail_msg_writer() << tr("wallet is watch-only and cannot generate the proof");
@@ -5303,11 +5307,15 @@ bool simple_wallet::check_spend_proof(const std::vector<std::string> &args)
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::get_reserve_proof(const std::vector<std::string> &args)
 {
+  if (m_wallet->key_on_device())
+  {
+    fail_msg_writer() << tr("command not supported by HW wallet");
+    return true;
+  }
   if(args.size() != 1 && args.size() != 2) {
     fail_msg_writer() << tr("usage: get_reserve_proof (all|<amount>) [<message>]");
     return true;
   }
-
   if (m_wallet->watch_only() || m_wallet->multisig())
   {
     fail_msg_writer() << tr("The reserve proof can be generated only by a full wallet");
