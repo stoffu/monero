@@ -189,6 +189,54 @@ namespace cryptonote
     device.get_subaddress_secret_key(a, index, m);
     return m;
   }
+
+  //---------------------------------------------------------------
+  std::vector<crypto::public_key> get_subaddress_spend_public_keys(const cryptonote::account_keys &keys, uint32_t account, uint32_t begin, uint32_t end)
+  {
+    CHECK_AND_ASSERT_THROW_MES(begin <= end, "begin > end");
+
+    std::vector<crypto::public_key> pkeys;
+    pkeys.reserve(end - begin);
+    cryptonote::subaddress_index index = {account, begin};
+
+    ge_p3 p3;
+    ge_cached cached;
+    CHECK_AND_ASSERT_THROW_MES(ge_frombytes_vartime(&p3, (const unsigned char*)keys.m_account_address.m_spend_public_key.data) == 0,
+        "ge_frombytes_vartime failed to convert spend public key");
+    ge_p3_to_cached(&cached, &p3);
+
+    for (uint32_t idx = begin; idx < end; ++idx)
+    {
+      index.minor = idx;
+      if (index.is_zero())
+      {
+        pkeys.push_back(keys.m_account_address.m_spend_public_key);
+        continue;
+      }
+      const crypto::secret_key m = cryptonote::get_subaddress_secret_key(keys.m_view_secret_key, index);
+
+      // M = m*G
+      ge_scalarmult_base(&p3, (const unsigned char*)m.data);
+
+      // D = B + M
+      crypto::public_key D;
+      ge_p1p1 p1p1;
+      ge_add(&p1p1, &p3, &cached);
+      ge_p1p1_to_p3(&p3, &p1p1);
+      ge_p3_tobytes((unsigned char*)D.data, &p3);
+
+      pkeys.push_back(D);
+    }
+    return pkeys;
+  }
+
+  std::vector<crypto::public_key> get_subaddress_spend_public_keys(const cryptonote::account_keys &keys, uint32_t account, uint32_t begin, uint32_t end,  hw::Device& device)
+  {
+    std::vector<crypto::public_key> pkeys;
+    device.get_subaddress_spend_public_keys(keys, account, begin, end, pkeys);
+    return pkeys;
+  }
+
   //---------------------------------------------------------------
   bool generate_key_image_helper(const account_keys& ack, const std::unordered_map<crypto::public_key, subaddress_index>& subaddresses, const crypto::public_key& out_key, const crypto::public_key& tx_public_key, const std::vector<crypto::public_key>& additional_tx_public_keys, size_t real_output_index, keypair& in_ephemeral, crypto::key_image& ki, hw::Device& device)
   {
@@ -1089,9 +1137,9 @@ namespace cryptonote
     return key;
   }
 
-
-#define CHACHA8_KEY_TAIL 0x8c
-bool generate_chacha_key_from_secret_keys(const account_keys &keys, crypto::chacha_key &key)
+  //---------------------------------------------------------------
+  #define CHACHA8_KEY_TAIL 0x8c
+  bool generate_chacha_key_from_secret_keys(const account_keys &keys, crypto::chacha_key &key)
   {
     const crypto::secret_key &view_key = keys.m_view_secret_key;
     const crypto::secret_key &spend_key = keys.m_spend_secret_key;
@@ -1103,6 +1151,7 @@ bool generate_chacha_key_from_secret_keys(const account_keys &keys, crypto::chac
     return true;
   }
 
+  //---------------------------------------------------------------
   crypto::public_key get_subaddress_spend_public_key(const cryptonote::account_keys& keys, const cryptonote::subaddress_index& index)
   {
     if (index.is_zero())
@@ -1121,6 +1170,7 @@ bool generate_chacha_key_from_secret_keys(const account_keys &keys, crypto::chac
     return D;
   }
 
+  //---------------------------------------------------------------
   cryptonote::account_public_address get_subaddress(const cryptonote::account_keys& keys, const cryptonote::subaddress_index& index)
   {
     if (index.is_zero())
@@ -1139,6 +1189,7 @@ bool generate_chacha_key_from_secret_keys(const account_keys &keys, crypto::chac
     return address;
   }
 
+  //---------------------------------------------------------------
   bool verify_keys(const crypto::secret_key& sec, const crypto::public_key& expected_pub)
   {
     crypto::public_key pub;
