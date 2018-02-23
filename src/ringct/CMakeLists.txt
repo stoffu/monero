@@ -28,6 +28,7 @@
 
 set(ringct_sources
   rctOps.cpp
+  rctOps_device.cpp
   rctSigs.cpp
   rctTypes.cpp
   rctCryptoOps.c

@@ -1,13 +1,46 @@
+// Copyright (c) 2017-2018, The Monero Project
+// 
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification, are
+// permitted provided that the following conditions are met:
+// 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
+//    conditions and the following disclaimer.
+// 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list
+//    of conditions and the following disclaimer in the documentation and/or other
+//    materials provided with the distribution.
+// 
+// 3. Neither the name of the copyright holder nor the names of its contributors may be
+//    used to endorse or promote products derived from this software without specific
+//    prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+// THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+// THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+
+
+#ifdef HAVE_PCSC
+
 #include "device_ledger.hpp"
-
 #include "log.hpp"
-
 #include "ringct/rctOps.h"
+
+
 
 namespace hw {
 
   namespace ledger {
-
+    #undef MONERO_DEFAULT_LOG_CATEGORY
+    #define MONERO_DEFAULT_LOG_CATEGORY "device.ledged"
 
     /* ===================================================================== */
     /* ===                           Debug                              ==== */
@@ -16,42 +49,43 @@ namespace hw {
       apdu_verbose = verbose;
     }
 
-  #define TRACKD MCDEBUG("ledger"," At file " << __FILE__ << ":" << __LINE__)
-  #define ASSERT_RV(rv)        CHECK_AND_ASSERT_THROW_MES((rv)==SCARD_S_SUCCESS, "Fail SCard API : (" << (rv) << ") "<< pcsc_stringify_error(rv)<<" Device="<<this->id<<", hCard="<<hCard<<", hContext="<<hContext);
-  #define ASSERT_SW(sw,ok,msk) CHECK_AND_ASSERT_THROW_MES(((sw)&(mask))==(ok), "Wrong Device Status : SW=" << std::hex << (sw) << " (EXPECT=" << std::hex << (ok) << ", MASK=" << std::hex << (mask) << ")") ;
+    #define TRACKD MTRACE("hw")
+    #define ASSERT_RV(rv)        CHECK_AND_ASSERT_THROW_MES((rv)==SCARD_S_SUCCESS, "Fail SCard API : (" << (rv) << ") "<< pcsc_stringify_error(rv)<<" Device="<<this->id<<", hCard="<<hCard<<", hContext="<<hContext);
+    #define ASSERT_SW(sw,ok,msk) CHECK_AND_ASSERT_THROW_MES(((sw)&(mask))==(ok), "Wrong Device Status : SW=" << std::hex << (sw) << " (EXPECT=" << std::hex << (ok) << ", MASK=" << std::hex << (mask) << ")") ;
+    #define ASSERT_T0(exp)       CHECK_AND_ASSERT_THROW_MES(exp, "Protocol assert failure: "#exp ) ;
 
-  #ifdef DEBUGLEDGER
-    #define DEVICE_CONTROLE      ,controle_device(hw::get_device("default"))
-    crypto::secret_key viewkey;
-    crypto::secret_key spendkey;
-  #else
-    #define DEVICE_CONTROLE 
-  #endif
+    #ifdef DEBUGLEDGER
+      #define DEVICE_CONTROLE      ,controle_device(hw::get_device("default"))
+      crypto::secret_key viewkey;
+      crypto::secret_key spendkey;
+    #else
+      #define DEVICE_CONTROLE 
+    #endif
 
     /* ===================================================================== */
     /* ===                        Keymap                                ==== */
     /* ===================================================================== */
 
     ABPkeys::ABPkeys(const rct::key& A, const rct::key& B, size_t real_output_index, const rct::key& P, const rct::key& AK) {
-      memcpy(&Aout,  &A, sizeof(rct::key));
-      memcpy(&Bout,  &B, sizeof(rct::key));
+      Aout = A;
+      Bout = B;
       index = real_output_index;
-      memcpy(&Pout,  &P, sizeof(rct::key));
-      memcpy(&AKout, &AK, sizeof(rct::key));
+      Pout = P;
+      AKout = AK;
     }
 
     ABPkeys::ABPkeys(const ABPkeys& keys) {
-      memcpy(&Aout,  &keys.Aout, sizeof(rct::key));
-      memcpy(&Bout,  &keys.Bout, sizeof(rct::key));
+      Aout  = keys.Aout;
+      Bout  = keys.Bout;
       index = keys.index;
-      memcpy(&Pout,  &keys.Pout, sizeof(rct::key));
-      memcpy(&AKout, &keys.AKout, sizeof(rct::key));
+      Pout  = keys.Pout;
+      AKout = keys.AKout;
     }
 
     bool Keymap::find(const rct::key& P, ABPkeys& keys) const {
-      int sz = ABP.size();
-      for (int i=0; i<sz; i++) {
-        if (memcmp(ABP[i].Pout.bytes, P.bytes,32) == 0) {
+      size_t sz = ABP.size();
+      for (size_t i=0; i<sz; i++) {
+        if (ABP[i].Pout == P) {
           keys = ABP[i];
           return true;
         }
@@ -70,8 +104,8 @@ namespace hw {
     #ifdef DEBUGLEDGER
     void Keymap::log() {
       log_message("keymap", "content");
-      int sz = ABP.size();
-      for (int i=0; i<sz; i++) {
+      size_t sz = ABP.size();
+      for (size_t i=0; i<sz; i++) {
         log_message("  keymap", std::to_string(i));
         log_hexbuffer("    Aout", (char*)ABP[i].Aout.bytes, 32);
         log_hexbuffer("    Bout", (char*)ABP[i].Bout.bytes, 32);
@@ -137,7 +171,7 @@ namespace hw {
           this->buffer_send[4]
           );
         buffer_to_str(strbuffer+strlen(strbuffer), (char*)(this->buffer_send+5), this->length_send-5);
-        MCDEBUG("ledger", "CMD  :" << std::string(strbuffer));
+        MDEBUG( "CMD  :" << strbuffer);
       }
     }
 
@@ -149,7 +183,7 @@ namespace hw {
           this->buffer_recv[this->length_recv-1]
           );
         buffer_to_str(strbuffer+strlen(strbuffer), (char*)(this->buffer_recv), this->length_recv-2);
-        MCDEBUG("ledger", "RESP :" << std::string(strbuffer));
+        MDEBUG( "RESP :" << strbuffer);
 
       }
     }
@@ -161,12 +195,12 @@ namespace hw {
       this->hContext = 0;
       this->reset_buffer();
       if (this->id)
-        MCDEBUG("ledger", "Device "<<this->id <<" Created");
+        MDEBUG( "Device "<<this->id <<" Created");
     }
 
     DeviceLedger::DeviceLedger(const DeviceLedger &device): DeviceLedger() {
       this->set_name(device.name);
-      MCDEBUG("ledger", "Device "<<device.id <<" cloned. Device "<<this->id <<" created");
+      MDEBUG( "Device "<<device.id <<" cloned. Device "<<this->id <<" created");
     }
 
     DeviceLedger& DeviceLedger::operator=(const DeviceLedger &device) {
@@ -176,7 +210,7 @@ namespace hw {
       this->hContext = 0;
       this->reset_buffer();
       this->exiting = device.exiting;
-      MCDEBUG("ledger", "Device "<<device.id <<" assigned. Device "<<this->id <<" created");
+      MDEBUG( "Device "<<device.id <<" assigned. Device "<<this->id <<" created");
       return *this;
     }
 
@@ -186,29 +220,29 @@ namespace hw {
       }
       this->release();
       if (this->id) {
-        MCDEBUG("ledger", "Device "<<this->id <<" Destroyed");
+        MDEBUG( "Device "<<this->id <<" Destroyed");
       }
     }
 
     void DeviceLedger::lock_device()   {
-      MCDEBUG("ledger", "Ask for LOCKING for device "<<this->id);
+      MDEBUG( "Ask for LOCKING for device "<<this->id);
       device_locker.lock();
-      MCDEBUG("ledger", "Device "<<this->id << " LOCKed");
+      MDEBUG( "Device "<<this->id << " LOCKed");
     }
     void DeviceLedger::unlock_device() {
-      MCDEBUG("ledger", "Ask for UNLOCKING for device "<<this->id);
+      MDEBUG( "Ask for UNLOCKING for device "<<this->id);
       device_locker.unlock();
-      MCDEBUG("ledger", "Device "<<this->id << " UNLOCKed");
+      MDEBUG( "Device "<<this->id << " UNLOCKed");
     }
     void DeviceLedger::lock_tx()       {
-      MCDEBUG("ledger", "Ask for LOCKING for TX "<<this->id);
+      MDEBUG( "Ask for LOCKING for TX "<<this->id);
       //tx_locker.lock();
-      MCDEBUG("ledger", "TX "<<this->id << " LOCKed");
+      MDEBUG( "TX "<<this->id << " LOCKed");
     }
     void DeviceLedger::unlock_tx()     {
-      MCDEBUG("ledger", "Ask for UNLOCKING for TX "<<this->id);
+      MDEBUG( "Ask for UNLOCKING for TX "<<this->id);
       //tx_locker.unlock();
-      MCDEBUG("ledger", "TX "<<this->id << " UNLOCKed");
+      MDEBUG( "TX "<<this->id << " UNLOCKed");
     }
 
     bool DeviceLedger::set_name(const std::string & name) {
@@ -216,7 +250,7 @@ namespace hw {
       return true;
     }
 
-    std::string DeviceLedger::get_name() {
+    const std::string DeviceLedger::get_name() const {
       if (this->full_name.empty() || (this->hCard == 0)) {
         return std::string("<disconnected:").append(this->name).append(">");
       }
@@ -228,7 +262,7 @@ namespace hw {
       this->release();
       rv = SCardEstablishContext(SCARD_SCOPE_SYSTEM,0,0, &this->hContext);
       ASSERT_RV(rv);
-      MCDEBUG("ledger", "Device "<<this->id <<" SCardContext created: hContext="<<this->hContext);
+      MDEBUG( "Device "<<this->id <<" SCardContext created: hContext="<<this->hContext);
       this->hCard = 0;
       return true;
     }
@@ -238,7 +272,7 @@ namespace hw {
       if (this->hContext) {
         SCardReleaseContext(this->hContext);
         if (!this->exiting) {
-          MCDEBUG("ledger", "Device "<<this->id <<" SCardContext released: hContext="<<this->hContext);
+          MDEBUG( "Device "<<this->id <<" SCardContext released: hContext="<<this->hContext);
         }
         this->hContext = 0;
         this->full_name.clear();
@@ -261,22 +295,22 @@ namespace hw {
         const char* prefix = this->name.c_str();
 
         p = mszReaders;
-        MCDEBUG("ledger", "Looking for " << std::string(prefix));
+        MDEBUG( "Looking for " << std::string(prefix));
         while (*p) {
-          MCDEBUG("ledger", "Device Found: " <<  std::string(p));
-          if ((memcmp(prefix, p, strlen(prefix))==0)) {
-            MCDEBUG("ledger", "Device Match: " <<  std::string(p));
+          MDEBUG( "Device Found: " <<  std::string(p));
+          if ((strncmp(prefix, p, strlen(prefix))==0)) {
+            MDEBUG( "Device Match: " <<  std::string(p));
             if ((rv = SCardConnect(this->hContext,
                                    p, SCARD_SHARE_EXCLUSIVE, SCARD_PROTOCOL_T0,
                                    &this->hCard, &dwProtocol))!=SCARD_S_SUCCESS) {
               break;
             }
-            MCDEBUG("ledger", "Device "<<this->id <<" Connected: hCard="<<this->hCard);
+            MDEBUG( "Device "<<this->id <<" Connected: hCard="<<this->hCard);
             dwAtrLen = sizeof(pbAtr);
             if ((rv = SCardStatus(this->hCard, NULL, &dwReaderLen, &dwState, &dwProtocol, pbAtr, &dwAtrLen))!=SCARD_S_SUCCESS) {
               break;
             }
-            MCDEBUG("ledger", "Device "<<this->id <<" Status OK");
+            MDEBUG( "Device "<<this->id <<" Status OK");
             rv = SCARD_S_SUCCESS ;
             this->full_name = std::string(p);
             break;
@@ -292,7 +326,7 @@ namespace hw {
       if (rv != SCARD_S_SUCCESS) {
         if ( hCard) {
           SCardDisconnect(this->hCard, SCARD_UNPOWER_CARD);
-          MCDEBUG("ledger", "Device "<<this->id <<" disconnected: hCard="<<this->hCard);
+          MDEBUG( "Device "<<this->id <<" disconnected: hCard="<<this->hCard);
           this->hCard = 0;
         }
       }
@@ -314,7 +348,7 @@ namespace hw {
       if (this->hCard) {
         SCardDisconnect(this->hCard, SCARD_UNPOWER_CARD);
         if (!this->exiting) {
-          MCDEBUG("ledger", "Device "<<this->id <<" disconnected: hCard="<<this->hCard); 
+          MDEBUG( "Device "<<this->id <<" disconnected: hCard="<<this->hCard); 
         }
         this->hCard = 0;
       }
@@ -325,15 +359,16 @@ namespace hw {
       LONG rv;
       int sw;
 
+      ASSERT_T0(this->length_send <= BUFFER_SEND_SIZE);
       logCMD();
-
-      this->length_recv = BUFFER_SEND_SIZE;
+      this->length_recv = BUFFER_RECV_SIZE;
       rv = SCardTransmit(this->hCard,
-      SCARD_PCI_T0, this->buffer_send, this->length_send,
-      NULL,         this->buffer_recv, &this->length_recv);
+                         SCARD_PCI_T0, this->buffer_send, this->length_send,
+                         NULL,         this->buffer_recv, &this->length_recv);
       ASSERT_RV(rv);
-
+      ASSERT_T0(this->length_recv <= BUFFER_RECV_SIZE);
       logRESP();
+
       sw = (this->buffer_recv[this->length_recv-2]<<8) | this->buffer_recv[this->length_recv-1];
       ASSERT_SW(sw,ok,msk);
       return sw;
@@ -343,7 +378,7 @@ namespace hw {
       this->length_send = 0;
       memset(this->buffer_send, 0, BUFFER_SEND_SIZE);
       this->length_recv = 0;
-      memset(this->buffer_recv, 0, BUFFER_SEND_SIZE);
+      memset(this->buffer_recv, 0, BUFFER_RECV_SIZE);
     }
 
     /* ======================================================================= */
@@ -581,7 +616,7 @@ namespace hw {
           this->buffer_send[offset] = 0x00;
           offset += 1;
           //index
-          assert(sizeof(cryptonote::subaddress_index) == 8);
+          static_assert(sizeof(cryptonote::subaddress_index) == 8);
           memmove(this->buffer_send+offset, &index, sizeof(cryptonote::subaddress_index));
           offset +=8 ;
 
@@ -643,7 +678,7 @@ namespace hw {
           this->buffer_send[offset] = 0x00;
           offset += 1;
           //index
-          assert(sizeof(cryptonote::subaddress_index) == 8);
+          static_assert(sizeof(cryptonote::subaddress_index) == 8);
           memmove(this->buffer_send+offset, &index, sizeof(cryptonote::subaddress_index));
           offset +=8 ;
 
@@ -696,7 +731,7 @@ namespace hw {
         memmove(this->buffer_send+offset, sec.data, 32);
         offset += 32;
         //index
-        assert(sizeof(cryptonote::subaddress_index) == 8);
+        static_assert(sizeof(cryptonote::subaddress_index) == 8);
         memmove(this->buffer_send+offset, &index, sizeof(cryptonote::subaddress_index));
         offset +=8 ;
 
@@ -749,7 +784,7 @@ namespace hw {
         this->length_send = offset;
         this->exchange();
 
-        unsigned  int verified =
+        uint32_t verified =
           this->buffer_recv[0] << 24 |
           this->buffer_recv[1] << 16 |
           this->buffer_recv[2] << 8  |
@@ -764,7 +799,7 @@ namespace hw {
       return false;
     }
 
-    bool DeviceLedger::scalarmultKey(const rct::key &pub, const rct::key &sec, rct::key &mulkey) {
+    bool DeviceLedger::scalarmultKey(rct::key & aP, const rct::key &P, const rct::key &a) {
       lock_device();
       try {
         int offset =0;
@@ -791,10 +826,10 @@ namespace hw {
         this->buffer_send[offset] = options;
         offset += 1;
         //pub
-        memmove(this->buffer_send+offset, pub.bytes, 32);
+        memmove(this->buffer_send+offset, P.bytes, 32);
         offset += 32;
         //sec
-        memmove(this->buffer_send+offset, sec.bytes, 32);
+        memmove(this->buffer_send+offset, a.bytes, 32);
         offset += 32;
 
 
@@ -803,7 +838,7 @@ namespace hw {
         this->exchange();
 
         //pub key
-        memmove(mulkey.bytes, &this->buffer_recv[0], 32);
+        memmove(aP.bytes, &this->buffer_recv[0], 32);
 
         #ifdef DEBUGLEDGER
         hw::ledger::check32("scalarmultKey", "mulkey", (char*)mulkey_x.bytes, (char*)mulkey.bytes);
@@ -817,7 +852,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::scalarmultBase(const rct::key &sec, rct::key &mulkey) {
+    bool DeviceLedger::scalarmultBase(rct::key &aG, const rct::key &a) {
       lock_device();
       try {
         int offset =0;
@@ -843,7 +878,7 @@ namespace hw {
         this->buffer_send[offset] = options;
         offset += 1;
         //sec
-        memmove(this->buffer_send+offset, sec.bytes, 32);
+        memmove(this->buffer_send+offset, a.bytes, 32);
         offset += 32;
 
         this->buffer_send[4] = offset-5;
@@ -851,7 +886,7 @@ namespace hw {
         this->exchange();
 
         //pub key
-        memmove(mulkey.bytes, &this->buffer_recv[0], 32);
+        memmove(aG.bytes, &this->buffer_recv[0], 32);
 
         #ifdef DEBUGLEDGER
         hw::ledger::check32("scalarmultBase", "mulkey", (char*)mulkey_x.bytes, (char*)mulkey.bytes);
@@ -865,7 +900,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::sc_secret_add(const crypto::secret_key &a, const crypto::secret_key &b, crypto::secret_key &r) {
+    bool DeviceLedger::sc_secret_add( crypto::secret_key &r, const crypto::secret_key &a, const crypto::secret_key &b) {
 
       lock_device();
       try {
@@ -876,7 +911,7 @@ namespace hw {
         const crypto::secret_key a_x = hw::ledger::decrypt(a);
         const crypto::secret_key b_x = hw::ledger::decrypt(b);
         crypto::secret_key r_x;
-        this->controle_device.sc_secret_add(a_x, b_x,r_x);
+        this->controle_device.sc_secret_add(r_x, a_x, b_x);
         #endif
 
         reset_buffer();
@@ -919,7 +954,7 @@ namespace hw {
       return true;
     }
 
-    bool  DeviceLedger::generate_keys(bool recover, const crypto::secret_key& recovery_key, crypto::public_key &pub, crypto::secret_key &sec, crypto::secret_key &rng) {
+    bool  DeviceLedger::generate_keys(crypto::public_key &pub, crypto::secret_key &sec, const crypto::secret_key& recovery_key, bool recover, crypto::secret_key &rng) {
       if (recover) {
         throw std::runtime_error("device generate key does not support recover");
       }
@@ -1442,7 +1477,7 @@ namespace hw {
       return true;
     }
 
-    bool  DeviceLedger::ecdhEncode(const rct::key &AKout, rct::ecdhTuple &unmasked) {
+    bool  DeviceLedger::ecdhEncode(rct::ecdhTuple & unmasked, const rct::key & AKout) {
       lock_device();
       try {
         int offset =0;
@@ -1497,7 +1532,7 @@ namespace hw {
       return true;
     }
 
-    bool  DeviceLedger::ecdhDecode(const rct::key &AKout, rct::ecdhTuple &masked){
+    bool  DeviceLedger::ecdhDecode(rct::ecdhTuple & masked, const rct::key & AKout) {
       lock_device();
       try {
         int offset =0;
@@ -1642,6 +1677,7 @@ namespace hw {
           found = this->key_map.find(outPk[i].dest, outKeys);
           if (!found) {
             log_hexbuffer("Pout not found", (char*)outPk[i].dest.bytes, 32);
+            CHECK_AND_ASSERT_THROW_MES(found, "Pout not found");
           }
           reset_buffer();
 
@@ -1862,7 +1898,7 @@ namespace hw {
       try {
         int offset =0;
         unsigned char options = 0;
-        int cnt;
+        size_t cnt;
 
         #ifdef DEBUGLEDGER
         const rct::keyV long_message_x = long_message;
@@ -1871,7 +1907,7 @@ namespace hw {
         #endif
 
         cnt = long_message.size();
-        for (int i = 0; i<cnt; i++) {
+        for (size_t i = 0; i<cnt; i++) {
           reset_buffer();
 
           this->buffer_send[0] = 0x00;
@@ -1908,11 +1944,16 @@ namespace hw {
 
     }
 
-    bool DeviceLedger::mlsag_sign(const rct::key &c, const rct::keyV &xx, const rct::keyV &alpha, const int rows, const int dsRows, rct::keyV &ss) {
+    bool DeviceLedger::mlsag_sign(const rct::key &c, const rct::keyV &xx, const rct::keyV &alpha, const size_t rows, const size_t dsRows, rct::keyV &ss) {
       lock_device();
       try {
         int offset =0;
         unsigned char options = 0;
+
+        CHECK_AND_ASSERT_THROW_MES(dsRows<=rows, "dsRows greater than rows");
+        CHECK_AND_ASSERT_THROW_MES(xx.size() == rows, "xx size does not match rows");
+        CHECK_AND_ASSERT_THROW_MES(alpha.size() == rows, "alpha size does not match rows");
+        CHECK_AND_ASSERT_THROW_MES(ss.size() == rows, "ss size does not match rows");
 
         #ifdef DEBUGLEDGER
         const rct::key c_x      = c;
@@ -1924,7 +1965,7 @@ namespace hw {
         this->controle_device.mlsag_sign(c_x, xx_x, alpha_x, rows_x, dsRows_x, ss_x);
         #endif
 
-        for (int j = 0; j < dsRows; j++) {
+        for (size_t j = 0; j < dsRows; j++) {
           reset_buffer();
 
           this->buffer_send[0] = 0x00;
@@ -1954,12 +1995,12 @@ namespace hw {
           memmove(ss[j].bytes, &this->buffer_recv[0], 32);
         }
 
-        for (int j = dsRows; j < rows; j++) {
+        for (size_t j = dsRows; j < rows; j++) {
           sc_mulsub(ss[j].bytes, c.bytes, xx[j].bytes, alpha[j].bytes);
         }
 
         #ifdef DEBUGLEDGER
-        for (int j = 0; j < rows; j++) {
+        for (size_t j = 0; j < rows; j++) {
            hw::ledger::check32("mlsag_sign", "ss["+std::to_string(j)+"]", (char*)ss_x[j].bytes, (char*)ss[j].bytes);
         }
         #endif
@@ -2005,12 +2046,12 @@ namespace hw {
 
     /* ---------------------------------------------------------- */
 
-    DeviceLedger legder_device;
+    static DeviceLedger legder_device;
     void register_all() {
       register_device("ledger", legder_device);
     }
 
-
   }
-
 }
+
+#endif //HAVE_PCSC

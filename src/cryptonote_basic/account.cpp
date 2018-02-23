@@ -60,14 +60,13 @@ DISABLE_VS_WARNINGS(4244 4345)
       return *this;
     }
   //-----------------------------------------------------------------
-  hw::Device& account_keys::get_device() const {
+  hw::Device& account_keys::get_device() const  {
     return *m_device;
   }
   //-----------------------------------------------------------------
   void account_keys::set_device( hw::Device &device)  {
     m_device = &device;
-    MCDEBUG("ledger", "account_keys::set_device device type: "<<typeid(device).name());
-    MCDEBUG("ledger", "account_keys::set_device m_device type: "<<typeid(*m_device).name());
+    MCDEBUG("device", "account_keys::set_device device type: "<<typeid(device).name());
   }
 
   //-----------------------------------------------------------------

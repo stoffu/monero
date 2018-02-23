@@ -54,7 +54,7 @@ namespace cryptonote
     END_KV_SERIALIZE_MAP()
 
     account_keys& operator=(const account_keys &keys);
-    hw::Device& get_device() const ;
+    hw::Device& get_device()  const ;
     void set_device( hw::Device &device) ;
   };
 
@@ -75,7 +75,7 @@ namespace cryptonote
     std::string get_public_address_str(bool testnet) const;
     std::string get_public_integrated_address_str(const crypto::hash8 &payment_id, bool testnet) const;
 
-    hw::Device& get_device() const {return m_keys.get_device();}
+    hw::Device& get_device() const  {return m_keys.get_device();}
     void set_device( hw::Device &device) {m_keys.set_device(device);}
 
     uint64_t get_createtime() const { return m_creation_timestamp; }

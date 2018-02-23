@@ -195,7 +195,6 @@ namespace rct {
             else {
               Hi = hashToPoint(pk[index][i]);
               device.mlsag_prepare(Hi, xx[i], alpha[i] , aG[i] , aHP[i] , rv.II[i]);
-              toHash[3 * i + 1] = pk[index][i];
               toHash[3 * i + 2] = aG[i];
               toHash[3 * i + 3] = aHP[i];
              }

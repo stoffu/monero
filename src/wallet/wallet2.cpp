@@ -2796,6 +2796,7 @@ void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& 
   m_multisig = true;
   m_multisig_threshold = threshold;
   m_multisig_signers = multisig_signers;
+  m_key_on_device = false;
 
   if (!wallet_.empty())
   {
@@ -2844,6 +2845,7 @@ crypto::secret_key wallet2::generate(const std::string& wallet_, const epee::wip
   m_multisig = false;
   m_multisig_threshold = 0;
   m_multisig_signers.clear();
+  m_key_on_device = false;
 
   // -1 month for fluctuations in block time and machine date/time setup.
   // avg seconds per block
@@ -2935,6 +2937,7 @@ void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& 
   m_multisig = false;
   m_multisig_threshold = 0;
   m_multisig_signers.clear();
+  m_key_on_device = false;
 
   if (!wallet_.empty())
   {
@@ -2981,6 +2984,7 @@ void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& 
   m_multisig = false;
   m_multisig_threshold = 0;
   m_multisig_signers.clear();
+  m_key_on_device = false;
 
   if (!wallet_.empty())
   {
@@ -3020,6 +3024,10 @@ void wallet2::restore(const std::string& wallet_, const epee::wipeable_string& p
   m_account.create_from_device(device_name);
   m_account_public_address = m_account.get_keys().m_account_address;
   m_watch_only = false;
+  m_multisig = false;
+  m_multisig_threshold = 0;
+  m_multisig_signers.clear();
+
   if (!wallet_.empty()) {
     bool r = store_keys(m_keys_file, password, false);
     THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
@@ -3099,6 +3107,8 @@ std::string wallet2::make_multisig(const epee::wipeable_string &password,
   m_watch_only = false;
   m_multisig = true;
   m_multisig_threshold = threshold;
+  m_key_on_device = false;
+
   if (threshold == spend_keys.size() + 1)
   {
     m_multisig_signers = spend_keys;
@@ -7091,8 +7101,6 @@ skip_tx:
       }
     }
   }
-
-  device.set_signature_mode(device.SIGNATURE_REAL);
 
   if (adding_fee)
   {

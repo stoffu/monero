@@ -43,8 +43,6 @@
 #include "warnings.h"
 #include "crypto.h"
 #include "hash.h"
-#include "device/device.hpp"
-#include "device/log.hpp"
 
 namespace {
   static void local_abort(const char *msg)
@@ -133,16 +131,6 @@ namespace crypto {
 
     return rng;
   }
-  secret_key generate_keys(public_key &pub, secret_key &sec, const secret_key& recovery_key, bool recover, hw::Device &device) {
-    secret_key rng;
-    device.generate_keys(recover, recovery_key, pub, sec, rng);
-    return rng;
-  }
-  secret_key generate_keys(public_key &pub, secret_key &sec, hw::Device &device) {
-    secret_key rng;
-    device.generate_keys(false, secret_key(), pub, sec, rng);
-    return rng;
-  }
 
   bool crypto_ops::check_key(const public_key &key) {
     ge_p3 point;
@@ -157,9 +145,6 @@ namespace crypto {
     ge_scalarmult_base(&point, &sec);
     ge_p3_tobytes(&pub, &point);
     return true;
-  }
-  bool secret_key_to_public_key(const secret_key &sec, public_key &pub, hw::Device &device) {
-      return device.secret_key_to_public_key(sec, pub);
   }
 
   bool crypto_ops::generate_key_derivation(const public_key &key1, const secret_key &key2, key_derivation &derivation) {
@@ -176,13 +161,10 @@ namespace crypto {
     ge_tobytes(&derivation, &point2);
     return true;
   }
-  bool generate_key_derivation(const public_key &key1, const secret_key &key2, key_derivation &derivation, hw::Device &device) {
-    return device.generate_key_derivation(key1, key2, derivation);
-  }
-
+ 
   void crypto_ops::derivation_to_scalar(const key_derivation &derivation, size_t output_index, ec_scalar &res) {
     struct {
-      crypto::key_derivation derivation;
+      key_derivation derivation;
       char output_index[(sizeof(size_t) * 8 + 6) / 7];
     } buf;
     char *end = buf.output_index;
@@ -191,14 +173,10 @@ namespace crypto {
     assert(end <= buf.output_index + sizeof buf.output_index);
     hash_to_scalar(&buf, end - reinterpret_cast<char *>(&buf), res);
   }
-  void derivation_to_scalar(const key_derivation &derivation, size_t output_index, ec_scalar &res, hw::Device &device) {
-    device.derivation_to_scalar(derivation, output_index, res);
-  }
-
 
   bool crypto_ops::derive_public_key(const key_derivation &derivation, size_t output_index,
     const public_key &base, public_key &derived_key) {
-    crypto::ec_scalar scalar;
+    ec_scalar scalar;
     ge_p3 point1;
     ge_p3 point2;
     ge_cached point3;
@@ -215,28 +193,17 @@ namespace crypto {
     ge_tobytes(&derived_key, &point5);
     return true;
   }
-  bool derive_public_key(const key_derivation &derivation, size_t output_index,
-                                     const public_key &base, public_key &derived_key, hw::Device &device) {
-    return device.derive_public_key(derivation, output_index, base, derived_key);
-  }
-
 
   void crypto_ops::derive_secret_key(const key_derivation &derivation, size_t output_index,
     const secret_key &base, secret_key &derived_key) {
-    crypto::ec_scalar scalar;
+    ec_scalar scalar;
     assert(sc_check(&base) == 0);
     derivation_to_scalar(derivation, output_index, scalar);
     sc_add(&derived_key, &base, &scalar);
-    hw::ledger::log_hexbuffer("crypto_ops::derive_secret_key: OUT : base", derived_key.data, 32);
-
-  }
-  void derive_secret_key(const key_derivation &derivation, size_t output_index,
-                                     const secret_key &base, secret_key &derived_key, hw::Device &device) {
-    device.derive_secret_key(derivation, output_index, base, derived_key);
   }
 
   bool crypto_ops::derive_subaddress_public_key(const public_key &out_key, const key_derivation &derivation, std::size_t output_index, public_key &derived_key) {
-    crypto::ec_scalar scalar;
+    ec_scalar scalar;
     ge_p3 point1;
     ge_p3 point2;
     ge_cached point3;
@@ -252,9 +219,6 @@ namespace crypto {
     ge_p1p1_to_p2(&point5, &point4);
     ge_tobytes(&derived_key, &point5);
     return true;
-  }
-  bool derive_subaddress_public_key(const public_key &out_key, const key_derivation &derivation, std::size_t output_index, public_key &derived_key, hw::Device &device) {
-    return device.derive_subaddress_public_key(out_key, derivation, output_index, derived_key);
   }
 
   struct s_comm {
@@ -486,12 +450,9 @@ namespace crypto {
     ge_p3 point;
     ge_p2 point2;
     assert(sc_check(&sec) == 0);
-    crypto::hash_to_ec(pub, point);
+    hash_to_ec(pub, point);
     ge_scalarmult(&point2, &sec, &point);
     ge_tobytes(&image, &point2);
-  }
-  void generate_key_image(const public_key &pub, const secret_key &sec, key_image &image, hw::Device &device) {
-    device.generate_key_image(pub,sec,image);
   }
 
 PUSH_WARNINGS

@@ -27,16 +27,40 @@
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
-#pragma once
+#include "misc_log_ex.h"
+#include "rctOps.h"
+#include "device/device.hpp"
+using namespace crypto;
+using namespace std;
 
 
-//#define DEBUGLEDGER
-//#define IODUMMYCRYPT 1
-//#define IONOCRYPT 1
+namespace rct
+{
+    void scalarmultKey(key & aP, const key &P, const key &a, hw::Device &device) {
+        device.scalarmultKey(aP, P, a);
+    }
 
-namespace hw {
-    class Device;
+    key scalarmultKey(const key & P, const key & a, hw::Device &device) {
+        key aP;
+        device.scalarmultKey(aP, P, a);
+        return aP;
+    }
 
-    Device& get_device(std::string device_descriptor);
+    void scalarmultBase(key &aG, const key &a, hw::Device &device) {
+        device.scalarmultBase(aG, a);
+    }
+
+    key scalarmultBase(const key & a, hw::Device &device) {
+        key aG;
+        device.scalarmultBase(aG, a);
+        return aG;
+    }
+
+    void ecdhDecode(ecdhTuple & masked, const key & sharedSec, hw::Device &device) {
+        device.ecdhDecode(masked, sharedSec);
+    }
+
+    void ecdhEncode(ecdhTuple & unmasked, const key & sharedSec, hw::Device &device) {
+        device.ecdhEncode(unmasked, sharedSec);
+    }
 }
-

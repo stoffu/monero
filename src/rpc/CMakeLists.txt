@@ -97,7 +97,6 @@ monero_add_library(daemon_rpc_server
 
 target_link_libraries(rpc_base
   PUBLIC
-    device
     common
     epee
     ${Boost_REGEX_LIBRARY}
@@ -136,7 +135,6 @@ target_link_libraries(daemon_rpc_server
     ${Boost_REGEX_LIBRARY}
     ${Boost_SYSTEM_LIBRARY}
     ${Boost_THREAD_LIBRARY}
-    ${GNU_READLINE_LIBRARY}
     ${ZMQ_LIB}
     ${EXTRA_LIBRARIES})
 target_include_directories(daemon_rpc_server PUBLIC ${ZMQ_INCLUDE_PATH})

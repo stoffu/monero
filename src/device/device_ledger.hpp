@@ -1,3 +1,34 @@
+// Copyright (c) 2017-2018, The Monero Project
+// 
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification, are
+// permitted provided that the following conditions are met:
+// 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
+//    conditions and the following disclaimer.
+// 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list
+//    of conditions and the following disclaimer in the documentation and/or other
+//    materials provided with the distribution.
+// 
+// 3. Neither the name of the copyright holder nor the names of its contributors may be
+//    used to endorse or promote products derived from this software without specific
+//    prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+// THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+// THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+
+#ifdef HAVE_PCSC
+
 #pragma once
 
 #include <cstddef>
@@ -41,6 +72,7 @@ namespace hw {
     };
 
     #define BUFFER_SEND_SIZE 262
+    #define BUFFER_RECV_SIZE 262
 
     class DeviceLedger : public hw::Device {
     private:
@@ -58,7 +90,7 @@ namespace hw {
         DWORD        length_send;
         BYTE         buffer_send[BUFFER_SEND_SIZE];
         DWORD        length_recv;
-        BYTE         buffer_recv[BUFFER_SEND_SIZE];
+        BYTE         buffer_recv[BUFFER_RECV_SIZE];
         unsigned int id;
 
         Keymap key_map;
@@ -87,7 +119,7 @@ namespace hw {
         /*                              SETUP/TEARDOWN                             */
         /* ======================================================================= */
         bool set_name(const std::string &name);
-        std::string get_name();
+        const std::string get_name() const;
         bool init(void);
         bool release();
         bool connect(void);
@@ -116,10 +148,10 @@ namespace hw {
         /*                            DERIVATION & KEY                             */
         /* ======================================================================= */
         bool  verify_keys(const crypto::secret_key &secret_key, const crypto::public_key &public_key);
-        bool  scalarmultKey(const rct::key &pub, const rct::key &sec, rct::key &mulkey);
-        bool  scalarmultBase(const rct::key &sec, rct::key &mulkey);
-        bool  sc_secret_add(const crypto::secret_key &a, const crypto::secret_key &b, crypto::secret_key &r);
-        bool  generate_keys(bool recover, const crypto::secret_key& recovery_key, crypto::public_key &pub, crypto::secret_key &sec, crypto::secret_key &rng);
+        bool  scalarmultKey(rct::key & aP, const rct::key &P, const rct::key &a);
+        bool  scalarmultBase(rct::key &aG, const rct::key &a);
+        bool  sc_secret_add(crypto::secret_key &r, const crypto::secret_key &a, const crypto::secret_key &b);
+        bool  generate_keys(crypto::public_key &pub, crypto::secret_key &sec, const crypto::secret_key& recovery_key, bool recover, crypto::secret_key &rng);
         bool  generate_key_derivation(const crypto::public_key &pub, const crypto::secret_key &sec, crypto::key_derivation &derivation);
         bool  derivation_to_scalar(const crypto::key_derivation &derivation, const size_t output_index, crypto::ec_scalar &res);
         bool  derive_secret_key(const crypto::key_derivation &derivation, const std::size_t output_index, const crypto::secret_key &sec,  crypto::secret_key &derived_sec);
@@ -138,8 +170,8 @@ namespace hw {
 
         bool  encrypt_payment_id(const crypto::public_key &public_key, const crypto::secret_key &secret_key, crypto::hash8 &payment_id );
 
-        bool  ecdhEncode(const rct::key &AKout, rct::ecdhTuple &unmasked);
-        bool  ecdhDecode(const rct::key &AKout, rct::ecdhTuple &masked);
+        bool  ecdhEncode(rct::ecdhTuple & unmasked, const rct::key & sharedSec);
+        bool  ecdhDecode(rct::ecdhTuple & masked, const rct::key & sharedSec);
 
         bool  add_output_key_mapping(const crypto::public_key &Aout, const crypto::public_key &Bout, size_t real_output_index,
                                             const rct::key &amount_key,  const crypto::public_key &out_eph_public_key);
@@ -149,7 +181,7 @@ namespace hw {
         bool  mlsag_prepare(const rct::key &H, const rct::key &xx, rct::key &a, rct::key &aG, rct::key &aHP, rct::key &rvII);
         bool  mlsag_prepare(rct::key &a, rct::key &aG);
         bool  mlsag_hash(const rct::keyV &long_message, rct::key &c);
-        bool  mlsag_sign( const rct::key &c, const rct::keyV &xx, const rct::keyV &alpha, const int rows, const int dsRows, rct::keyV &ss);
+        bool  mlsag_sign( const rct::key &c, const rct::keyV &xx, const rct::keyV &alpha, const size_t rows, const size_t dsRows, rct::keyV &ss);
 
         bool  close_tx(void);
 
@@ -165,3 +197,4 @@ namespace hw {
 
 }
 
+#endif  //#ifdef HAVE_PCSC

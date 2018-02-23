@@ -1,29 +1,50 @@
+// Copyright (c) 2017-2018, The Monero Project
+// 
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification, are
+// permitted provided that the following conditions are met:
+// 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
+//    conditions and the following disclaimer.
+// 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list
+//    of conditions and the following disclaimer in the documentation and/or other
+//    materials provided with the distribution.
+// 
+// 3. Neither the name of the copyright holder nor the names of its contributors may be
+//    used to endorse or promote products derived from this software without specific
+//    prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+// THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+// THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+
 #include "misc_log_ex.h"
 #include "log.hpp"
 
 namespace hw {
     namespace ledger {
 
-    void buffer_to_str(char *to,  const char *buff, int len) {
-      for (int i=0; i<len; i++) {
+    void buffer_to_str(char *to,  const char *buff, size_t len) {
+      for (size_t i=0; i<len; i++) {
         sprintf(to+2*i, "%.02x", (unsigned char)buff[i]);
       }
     }
-    void bufferLE_to_str(char *to,  const char *buff, int len) {
-      for (int i=0; i<len; i++) {
-        sprintf(to+2*i, "%.02x", (unsigned char)buff[31-i]);
+
+    void log_hexbuffer(std::string msg,  const char* buff, size_t len) {
+      char logstr[1025];
+      if (len>512) {
+        len = 512;
       }
-    }
-
-    void log_hexbuffer(std::string msg,  const char* buff, int len) {
-      char logstr[1024];
       buffer_to_str(logstr,  buff, len);
-      MCDEBUG("ledger", msg<< ": " << logstr);
-    }
-
-    void log_hexbufferLE(std::string msg,  const char* buff, int len) {
-      char logstr[1024];
-      bufferLE_to_str(logstr,  buff, len);
       MCDEBUG("ledger", msg<< ": " << logstr);
     }
 
@@ -36,7 +57,7 @@ namespace hw {
     extern crypto::secret_key spendkey;
 
 
-    void decrypt(char* buf, int len) {
+    void decrypt(char* buf, size_t len) {
       #ifdef IODUMMYCRYPT
       int i;
       if (len == 32) {

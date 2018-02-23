@@ -1,12 +1,38 @@
+// Copyright (c) 2017-2018, The Monero Project
+// 
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification, are
+// permitted provided that the following conditions are met:
+// 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
+//    conditions and the following disclaimer.
+// 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list
+//    of conditions and the following disclaimer in the documentation and/or other
+//    materials provided with the distribution.
+// 
+// 3. Neither the name of the copyright holder nor the names of its contributors may be
+//    used to endorse or promote products derived from this software without specific
+//    prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+// THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+// THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+
 
 #pragma once
 
-#include "crypto/crypto.h"
-#include "crypto/hash.h"
 #include "cryptonote_basic/cryptonote_basic.h"
 #include "cryptonote_basic/account.h"
 #include "cryptonote_basic/subaddress_index.h"
-#include "cryptonote_basic/blobdatatype.h"
 
 
 namespace hw {
@@ -18,11 +44,10 @@ namespace hw {
            return false;
     }
 
-    static inline unsigned char *operator &(crypto::ec_scalar &scalar) {
+    inline unsigned char *operator &(crypto::ec_scalar &scalar) {
         return &reinterpret_cast<unsigned char &>(scalar);
     }
-
-    static inline const unsigned char *operator &(const crypto::ec_scalar &scalar) {
+    inline const unsigned char *operator &(const crypto::ec_scalar &scalar) {
         return &reinterpret_cast<const unsigned char &>(scalar);
     }
 
@@ -46,7 +71,7 @@ namespace hw {
         /*                              SETUP/TEARDOWN                             */
         /* ======================================================================= */
         virtual bool set_name(const std::string &name);
-        virtual std::string get_name();
+        virtual const std::string get_name() const;
 
         virtual  bool init(void);
         virtual bool release();
@@ -75,10 +100,10 @@ namespace hw {
         /*                            DERIVATION & KEY                             */
         /* ======================================================================= */
         virtual bool  verify_keys(const crypto::secret_key &secret_key, const crypto::public_key &public_key);
-        virtual bool  scalarmultKey(const rct::key &pub, const rct::key &sec, rct::key &mulkey);
-        virtual bool  scalarmultBase(const rct::key &sec, rct::key &mulkey);
-        virtual bool  sc_secret_add(const crypto::secret_key &a, const crypto::secret_key &b, crypto::secret_key &r);
-        virtual bool  generate_keys(bool recover, const crypto::secret_key& recovery_key, crypto::public_key &pub, crypto::secret_key &sec, crypto::secret_key &rng);
+        virtual bool  scalarmultKey(rct::key & aP, const rct::key &P, const rct::key &a);
+        virtual bool  scalarmultBase(rct::key &aG, const rct::key &a);
+        virtual bool  sc_secret_add( crypto::secret_key &r, const crypto::secret_key &a, const crypto::secret_key &b);
+        virtual bool  generate_keys(crypto::public_key &pub, crypto::secret_key &sec, const crypto::secret_key& recovery_key, bool recover, crypto::secret_key &rng);
         virtual bool  generate_key_derivation(const crypto::public_key &pub, const crypto::secret_key &sec, crypto::key_derivation &derivation);
         virtual bool  derivation_to_scalar(const crypto::key_derivation &derivation, const size_t output_index, crypto::ec_scalar &res);
         virtual bool  derive_secret_key(const crypto::key_derivation &derivation, const std::size_t output_index, const crypto::secret_key &sec,  crypto::secret_key &derived_sec);
@@ -97,8 +122,8 @@ namespace hw {
 
         virtual bool  encrypt_payment_id(const crypto::public_key &public_key, const crypto::secret_key &secret_key, crypto::hash8 &payment_id );
 
-        virtual bool  ecdhEncode(const rct::key &AKout, rct::ecdhTuple &unmasked);
-        virtual bool  ecdhDecode(const rct::key &AKout, rct::ecdhTuple &masked);
+        virtual bool  ecdhEncode(rct::ecdhTuple & unmasked, const rct::key & sharedSec);
+        virtual bool  ecdhDecode(rct::ecdhTuple & masked, const rct::key & sharedSec);
 
         virtual bool  add_output_key_mapping(const crypto::public_key &Aout, const crypto::public_key &Bout, size_t real_output_index,
                                             const rct::key &amount_key,  const crypto::public_key &out_eph_public_key);
@@ -108,13 +133,13 @@ namespace hw {
         virtual bool  mlsag_prepare(const rct::key &H, const rct::key &xx, rct::key &a, rct::key &aG, rct::key &aHP, rct::key &rvII);
         virtual bool  mlsag_prepare(rct::key &a, rct::key &aG);
         virtual bool  mlsag_hash(const rct::keyV &long_message, rct::key &c);
-        virtual bool  mlsag_sign(const rct::key &c, const rct::keyV &xx, const rct::keyV &alpha, const int rows, const int dsRows, rct::keyV &ss);
+        virtual bool  mlsag_sign(const rct::key &c, const rct::keyV &xx, const rct::keyV &alpha, const size_t rows, const size_t dsRows, rct::keyV &ss);
 
         virtual bool  close_tx(void);
     };
 
-    Device& register_device(std::string device_descriptor, Device& device);
-    Device& get_device(std::string device_descriptor) ;
+    Device& register_device(const std::string device_descriptor, Device& device);
+    Device& get_device(const std::string device_descriptor) ;
     void register_devices(void);
 }
 

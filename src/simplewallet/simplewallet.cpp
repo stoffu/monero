@@ -3099,12 +3099,6 @@ bool simple_wallet::save_watch_only(const std::vector<std::string> &args/* = std
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::start_mining(const std::vector<std::string>& args)
 {
-  if (m_wallet->key_on_device())
-  {
-    fail_msg_writer() << tr("command not supported by HW wallet");
-    return true;
-  }
-
   if (!m_trusted_daemon)
   {
     fail_msg_writer() << tr("this command requires a trusted daemon. Enable with --trusted-daemon");

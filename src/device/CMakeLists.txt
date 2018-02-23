@@ -63,6 +63,7 @@ target_link_libraries(device
     pcsclite
     crypto
     ringct
+    ${OPENSSL_CRYPTO_LIBRARIES}
     ${GNU_READLINE_LIBRARY}
     ${EPEE_READLINE}
   PRIVATE

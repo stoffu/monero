@@ -519,7 +519,7 @@ void cn_slow_hash(const void *data, size_t length, char *hash) {
     cn_slow_hash_pre(data,length,hash,0);
 }
 
-void cn_slow_hash_pre(const void *data, size_t length, char *hash, int prehashed)
+void cn_slow_hash_pre(const void *data, size_t length, char *hash, bool prehashed)
 {
     RDATA_ALIGN16 uint8_t expandedKey[240];  /* These buffers are aligned to use later with SSE functions */
 

@@ -1,10 +1,38 @@
+// Copyright (c) 2017-2018, The Monero Project
+// 
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification, are
+// permitted provided that the following conditions are met:
+// 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
+//    conditions and the following disclaimer.
+// 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list
+//    of conditions and the following disclaimer in the documentation and/or other
+//    materials provided with the distribution.
+// 
+// 3. Neither the name of the copyright holder nor the names of its contributors may be
+//    used to endorse or promote products derived from this software without specific
+//    prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+// THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+// THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+
+#include "device.hpp"
 #include "device_default.hpp"
 #include "device_ledger.hpp"
 
 
-#include "ringct/rctCryptoOps.h"
-#include "ringct/rctOps.h"
-#include "wallet/wallet2.h"
+//#include "ringct/rctOps.h"
 
 #include "common/scoped_message_writer.h"
 
@@ -21,21 +49,23 @@ namespace hw {
             //tools::scoped_message_writer w  = tools::msg_writer();
             //w << "Registering devices...";
             hw::core::register_all();
+            #ifdef HAVE_PCSC
             hw::ledger::register_all();
+            #endif
             //w << "done.";
 
             return registry.size();
         }();
     }
 
-    Device& register_device(std::string device_descriptor, Device& device) {
+    Device& register_device(const std::string device_descriptor, Device& device) {
         //tools::scoped_message_writer w  = tools::success_msg_writer();
         registry.insert(std::make_pair(device_descriptor,std::ref(device)));
         return device;
     }
 
 
-    Device& get_device(std::string device_descriptor) {
+    Device& get_device(const std::string device_descriptor) {
         auto device = registry.find(device_descriptor);
          if (device == registry.end()) {
             tools::fail_msg_writer()<< "Device not found "<<device_descriptor;
@@ -55,7 +85,7 @@ namespace hw {
         this->name = name;
         return true;
     }
-    std::string Device::get_name() {
+    const std::string Device::get_name()  const {
         return this->name;
     }
     bool Device::init(void) {
@@ -107,16 +137,16 @@ namespace hw {
     bool  Device::verify_keys(const crypto::secret_key &secret_key, const crypto::public_key &public_key) {
         dfns();
     }
-    bool  Device::scalarmultKey(const rct::key &pub, const rct::key &sec, rct::key &mulkey) {
+    bool  Device::scalarmultKey(rct::key & aP, const rct::key &P, const rct::key &a) {
         dfns();
     }
-    bool  Device::scalarmultBase(const rct::key &sec, rct::key &mulkey) {
+    bool  Device::scalarmultBase(rct::key &aG, const rct::key &a) {
         dfns();
     }
-    bool  Device::sc_secret_add(const crypto::secret_key &a, const crypto::secret_key &b, crypto::secret_key &r) {
+    bool  Device::sc_secret_add( crypto::secret_key &r, const crypto::secret_key &a, const crypto::secret_key &b) {
         dfns();
     }
-    bool  Device::generate_keys(bool recover, const crypto::secret_key& recovery_key, crypto::public_key &pub, crypto::secret_key &sec, crypto::secret_key &rng) {
+    bool  Device::generate_keys(crypto::public_key &pub, crypto::secret_key &sec, const crypto::secret_key& recovery_key, bool recover, crypto::secret_key &rng) {
         dfns();
     }
     bool  Device::generate_key_derivation(const crypto::public_key &pub, const crypto::secret_key &sec, crypto::key_derivation &derivation) {
@@ -151,10 +181,10 @@ namespace hw {
     bool  Device::encrypt_payment_id(const crypto::public_key &public_key, const crypto::secret_key &secret_key, crypto::hash8 &payment_id ) {
         dfns();
     }
-    bool  Device::ecdhEncode(const rct::key &AKout, rct::ecdhTuple &unmasked) {
+    bool  Device::ecdhEncode(rct::ecdhTuple & unmasked, const rct::key & sharedSec) {
         dfns();
     }
-    bool  Device::ecdhDecode(const rct::key &AKout, rct::ecdhTuple &masked) {
+    bool  Device::ecdhDecode(rct::ecdhTuple & masked, const rct::key & sharedSec) {
         dfns();
     }
     bool  Device::add_output_key_mapping(const crypto::public_key &Aout, const crypto::public_key &Bout, size_t real_output_index,
@@ -173,7 +203,7 @@ namespace hw {
     bool  Device::mlsag_hash(const rct::keyV &long_message, rct::key &c) {
         dfns();
     }
-    bool  Device::mlsag_sign(const rct::key &c, const rct::keyV &xx, const rct::keyV &alpha, const int rows, const int dsRows, rct::keyV &ss) {
+    bool  Device::mlsag_sign(const rct::key &c, const rct::keyV &xx, const rct::keyV &alpha, const size_t rows, const size_t dsRows, rct::keyV &ss) {
         dfns();
     }
     bool  Device::close_tx(void) {

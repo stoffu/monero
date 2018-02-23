@@ -45,9 +45,6 @@ target_link_libraries(cncrypto-tests
     wallet
     cryptonote_core
     common
-    blockchain_db
-    p2p
-    epee
     device
     ${Boost_SYSTEM_LIBRARY}
     ${EXTRA_LIBRARIES})

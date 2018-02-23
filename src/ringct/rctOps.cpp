@@ -31,7 +31,6 @@
 #include <boost/lexical_cast.hpp>
 #include "misc_log_ex.h"
 #include "rctOps.h"
-#include "device/device.hpp"
 using namespace crypto;
 using namespace std;
 
@@ -165,9 +164,6 @@ namespace rct {
         ge_scalarmult_base(&point, aG.bytes);
         ge_p3_tobytes(aG.bytes, &point);
     }
-    void scalarmultBase(key &aG, const key &a, hw::Device &device) {
-        device.scalarmultBase(a,aG);
-    }
 
     //does a * G where a is a scalar and G is the curve basepoint
     key scalarmultBase(const key & a) {
@@ -178,11 +174,6 @@ namespace rct {
         ge_p3_tobytes(aG.bytes, &point);
         return aG;
     }
-    key scalarmultBase(const key & a, hw::Device &device) {
-        key aG;
-        device.scalarmultBase(a,aG);
-        return aG;
-    }
 
     //does a * P where a is a scalar and P is an arbitrary point
     void scalarmultKey(key & aP, const key &P, const key &a) {
@@ -191,9 +182,6 @@ namespace rct {
         CHECK_AND_ASSERT_THROW_MES_L1(ge_frombytes_vartime(&A, P.bytes) == 0, "ge_frombytes_vartime failed at "+boost::lexical_cast<std::string>(__LINE__));
         ge_scalarmult(&R, a.bytes, &A);
         ge_tobytes(aP.bytes, &R);
-    }
-    void scalarmultKey(key & aP, const key &P, const key &a, hw::Device &device) {
-        device.scalarmultKey(P,a,aP);
     }
 
     //does a * P where a is a scalar and P is an arbitrary point
@@ -206,11 +194,7 @@ namespace rct {
         ge_tobytes(aP.bytes, &R);
         return aP;
     }
-    key scalarmultKey(const key & P, const key & a, hw::Device &device) {
-        key aP;
-        device.scalarmultKey(P,a,aP);
-        return aP;
-    }
+
 
     //Computes aH where H= toPoint(cn_fast_hash(G)), G the basepoint
     key scalarmultH(const key & a) {
@@ -461,23 +445,17 @@ namespace rct {
     //Elliptic Curve Diffie Helman: encodes and decodes the amount b and mask a
     // where C= aG + bH
     void ecdhEncode(ecdhTuple & unmasked, const key & sharedSec) {
-        rct::key sharedSec1 = rct::hash_to_scalar(sharedSec);
-        rct::key sharedSec2 = rct::hash_to_scalar(sharedSec1);
+        key sharedSec1 = hash_to_scalar(sharedSec);
+        key sharedSec2 = hash_to_scalar(sharedSec1);
         //encode
         sc_add(unmasked.mask.bytes, unmasked.mask.bytes, sharedSec1.bytes);
         sc_add(unmasked.amount.bytes, unmasked.amount.bytes, sharedSec2.bytes);
     }
-    void ecdhEncode(ecdhTuple & unmasked, const key & sharedSec, hw::Device &device) {
-        device.ecdhEncode(sharedSec, unmasked);
-    }
     void ecdhDecode(ecdhTuple & masked, const key & sharedSec) {
-        rct::key sharedSec1 = rct::hash_to_scalar(sharedSec);
-        rct::key sharedSec2 = rct::hash_to_scalar(sharedSec1);
+        key sharedSec1 = hash_to_scalar(sharedSec);
+        key sharedSec2 = hash_to_scalar(sharedSec1);
         //decode
         sc_sub(masked.mask.bytes, masked.mask.bytes, sharedSec1.bytes);
         sc_sub(masked.amount.bytes, masked.amount.bytes, sharedSec2.bytes);
-    }
-    void ecdhDecode(ecdhTuple & masked, const key & sharedSec, hw::Device &device) {
-        device.ecdhDecode(sharedSec, masked);
     }
 }
