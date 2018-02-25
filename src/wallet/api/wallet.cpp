@@ -40,6 +40,7 @@
 #include "common/util.h"
 
 #include "mnemonics/electrum-words.h"
+#include "mnemonics/english.h"
 #include <boost/format.hpp>
 #include <sstream>
 #include <unordered_map>
@@ -587,6 +588,9 @@ bool WalletImpl::recover(const std::string &path, const std::string &seed)
         m_status = Status_Error;
         return false;
     }
+
+    if (old_language == crypto::ElectrumWords::old_language_name)
+        old_language = Language::English().get_language_name();
 
     try {
         m_wallet->set_seed_language(old_language);
