@@ -118,6 +118,7 @@ struct options {
   const command_line::arg_descriptor<std::string> daemon_login = {"daemon-login", tools::wallet2::tr("Specify username[:password] for daemon RPC client"), "", true};
   const command_line::arg_descriptor<bool> testnet = {"testnet", tools::wallet2::tr("For testnet. Daemon must also be launched with --testnet flag"), false};
   const command_line::arg_descriptor<bool> restricted = {"restricted-rpc", tools::wallet2::tr("Restricts to view-only commands"), false};
+  const command_line::arg_descriptor<bool> create_address_file = {"create-address-file", tools::wallet2::tr("Create an address file for new wallets"), false};
 };
 
 void do_prepare_file_names(const std::string& file_path, std::string& keys_file, std::string& wallet_file)
@@ -159,6 +160,7 @@ std::unique_ptr<tools::wallet2> make_basic(const boost::program_options::variabl
 {
   const bool testnet = command_line::get_arg(vm, opts.testnet);
   const bool restricted = command_line::get_arg(vm, opts.restricted);
+  const bool create_address_file = testnet || command_line::get_arg(vm, opts.create_address_file);
 
   auto daemon_address = command_line::get_arg(vm, opts.daemon_address);
   auto daemon_host = command_line::get_arg(vm, opts.daemon_host);
@@ -194,6 +196,7 @@ std::unique_ptr<tools::wallet2> make_basic(const boost::program_options::variabl
 
   std::unique_ptr<tools::wallet2> wallet(new tools::wallet2(testnet, restricted));
   wallet->init(std::move(daemon_address), std::move(login));
+  wallet->set_create_address_file(create_address_file);
   return wallet;
 }
 
@@ -618,6 +621,7 @@ wallet2::wallet2(bool testnet, bool restricted):
   m_node_rpc_proxy(m_http_client, m_daemon_rpc_mutex),
   m_subaddress_lookahead_major(SUBADDRESS_LOOKAHEAD_MAJOR),
   m_subaddress_lookahead_minor(SUBADDRESS_LOOKAHEAD_MINOR),
+  m_create_address_file(false),
   m_light_wallet(false),
   m_light_wallet_scanned_block_height(0),
   m_light_wallet_blockchain_height(0),
@@ -643,6 +647,7 @@ void wallet2::init_options(boost::program_options::options_description& desc_par
   command_line::add_arg(desc_params, opts.daemon_login);
   command_line::add_arg(desc_params, opts.testnet);
   command_line::add_arg(desc_params, opts.restricted);
+  command_line::add_arg(desc_params, opts.create_address_file);
 }
 
 std::unique_ptr<wallet2> wallet2::make_from_json(const boost::program_options::variables_map& vm, const std::string& json_file, const std::function<boost::optional<tools::password_container>(const char *, bool)> &password_prompter)
@@ -813,6 +818,15 @@ const std::string &wallet2::get_seed_language() const
 void wallet2::set_seed_language(const std::string &language)
 {
   seed_language = language;
+}
+//----------------------------------------------------------------------------------------------------
+/*!
+ * \brief Sets whether or not to create an address file
+ * \param create  Whether or not to create an address file
+ */
+void wallet2::set_create_address_file(const bool &create)
+{
+  m_create_address_file = create;
 }
 //----------------------------------------------------------------------------------------------------
 cryptonote::account_public_address wallet2::get_subaddress(const cryptonote::subaddress_index& index) const
@@ -2809,8 +2823,11 @@ void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& 
     bool r = store_keys(m_keys_file, password, false);
     THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
 
-    r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
-    if(!r) MERROR("String with address text not saved");
+    if (m_create_address_file)
+    {
+      r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
+      if(!r) MERROR("String with address text not saved");
+    }
   }
 
   cryptonote::block b;
@@ -2869,8 +2886,11 @@ crypto::secret_key wallet2::generate(const std::string& wallet_, const epee::wip
     bool r = store_keys(m_keys_file, password, false);
     THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
 
-    r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
-    if(!r) MERROR("String with address text not saved");
+    if (m_create_address_file)
+    {
+      r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
+      if(!r) MERROR("String with address text not saved");
+    }
   }
 
   cryptonote::block b;
@@ -2948,8 +2968,11 @@ void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& 
     bool r = store_keys(m_keys_file, password, true);
     THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
 
-    r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
-    if(!r) MERROR("String with address text not saved");
+    if (m_create_address_file)
+    {
+      r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
+      if(!r) MERROR("String with address text not saved");
+    }
   }
 
   cryptonote::block b;
@@ -2994,8 +3017,11 @@ void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& 
     bool r = store_keys(m_keys_file, password, false);
     THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
 
-    r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
-    if(!r) MERROR("String with address text not saved");
+    if (m_create_address_file)
+    {
+      r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
+      if(!r) MERROR("String with address text not saved");
+    }
   }
 
   cryptonote::block b;
@@ -3085,8 +3111,11 @@ std::string wallet2::make_multisig(const epee::wipeable_string &password,
     bool r = store_keys(m_keys_file, password, false);
     THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
 
-    r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
-    if(!r) MERROR("String with address text not saved");
+    if (m_create_address_file)
+    {
+      r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
+      if(!r) MERROR("String with address text not saved");
+    }
   }
 
   cryptonote::block b;
@@ -3185,8 +3214,11 @@ bool wallet2::finalize_multisig(const epee::wipeable_string &password, std::unor
     bool r = store_keys(m_keys_file, password, false);
     THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
 
-    r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
-    if(!r) MERROR("String with address text not saved");
+    if (m_create_address_file)
+    {
+      r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
+      if(!r) MERROR("String with address text not saved");
+    }
   }
 
   m_subaddresses.clear();
@@ -3716,10 +3748,13 @@ void wallet2::store_to(const std::string &path, const epee::wipeable_string &pas
     prepare_file_names(path);
     bool r = store_keys(m_keys_file, password, false);
     THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
-    // save address to the new file
-    const std::string address_file = m_wallet_file + ".address.txt";
-    r = file_io_utils::save_string_to_file(address_file, m_account.get_public_address_str(m_testnet));
-    THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_wallet_file);
+    if (m_create_address_file)
+    {
+      // save address to the new file
+      const std::string address_file = m_wallet_file + ".address.txt";
+      r = file_io_utils::save_string_to_file(address_file, m_account.get_public_address_str(m_testnet));
+      THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_wallet_file);
+    }
     // remove old wallet file
     r = boost::filesystem::remove(old_file);
     if (!r) {

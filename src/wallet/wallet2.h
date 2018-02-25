@@ -601,6 +601,11 @@ namespace tools
      */
     void set_seed_language(const std::string &language);
 
+    /*!
+     * \brief Sets whether or not to create an address file
+     */
+    void set_create_address_file(const bool &create);
+
     // Subaddress scheme
     cryptonote::account_public_address get_subaddress(const cryptonote::subaddress_index& index) const;
     cryptonote::account_public_address get_address() const { return get_subaddress({0,0}); }
@@ -1137,6 +1142,7 @@ namespace tools
     NodeRPCProxy m_node_rpc_proxy;
     std::unordered_set<crypto::hash> m_scanned_pool_txs[2];
     size_t m_subaddress_lookahead_major, m_subaddress_lookahead_minor;
+    bool m_create_address_file;
 
     // Light wallet
     bool m_light_wallet; /* sends view key to daemon for scanning */
