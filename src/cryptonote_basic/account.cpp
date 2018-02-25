@@ -65,6 +65,15 @@ DISABLE_VS_WARNINGS(4244 4345)
   {
     m_keys.m_spend_secret_key = crypto::secret_key();
     m_keys.m_multisig_keys.clear();
+    m_keys.m_mymonero_key = crypto::null_legacy16B_skey;
+  }
+  //-----------------------------------------------------------------
+  void account_base::generate(const crypto::legacy16B_secret_key& mymonero_key)
+  {
+    m_keys.m_mymonero_key = mymonero_key;
+    crypto::secret_key recovery_key;
+    crypto::coerce_valid_sec_key_from(m_keys.m_mymonero_key, recovery_key);
+    generate(recovery_key, true, false, true);
   }
   //-----------------------------------------------------------------
   crypto::secret_key account_base::generate(const crypto::secret_key& recovery_key, bool recover, bool two_random, bool from_legacy16B_lw_seed)
@@ -74,6 +83,9 @@ DISABLE_VS_WARNINGS(4244 4345)
     // rng for generating second set of keys is hash of first rng.  means only one set of electrum-style words needed for recovery
     crypto::secret_key second;
     keccak((uint8_t *)&(from_legacy16B_lw_seed ? first : m_keys.m_spend_secret_key), sizeof(crypto::secret_key), (uint8_t *)&second, sizeof(crypto::secret_key));
+
+    if (!from_legacy16B_lw_seed)
+      m_keys.m_mymonero_key = crypto::null_legacy16B_skey;
 
     generate_keys(m_keys.m_account_address.m_view_public_key, m_keys.m_view_secret_key, second, two_random ? false : true);
 
@@ -103,6 +115,7 @@ DISABLE_VS_WARNINGS(4244 4345)
     m_keys.m_account_address = address;
     m_keys.m_spend_secret_key = spendkey;
     m_keys.m_view_secret_key = viewkey;
+    m_keys.m_mymonero_key = crypto::null_legacy16B_skey;
 
     struct tm timestamp = {0};
     timestamp.tm_year = 2014 - 1900;  // year 2014

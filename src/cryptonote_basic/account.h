@@ -43,12 +43,14 @@ namespace cryptonote
     crypto::secret_key   m_spend_secret_key;
     crypto::secret_key   m_view_secret_key;
     std::vector<crypto::secret_key> m_multisig_keys;
+    crypto::legacy16B_secret_key m_mymonero_key;
 
     BEGIN_KV_SERIALIZE_MAP()
       KV_SERIALIZE(m_account_address)
       KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(m_spend_secret_key)
       KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(m_view_secret_key)
       KV_SERIALIZE_CONTAINER_POD_AS_BLOB(m_multisig_keys)
+      KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(m_mymonero_key)
     END_KV_SERIALIZE_MAP()
   };
 
@@ -59,6 +61,7 @@ namespace cryptonote
   {
   public:
     account_base();
+    void generate(const crypto::legacy16B_secret_key& mymonero_key);
     crypto::secret_key generate(const crypto::secret_key& recovery_key = crypto::secret_key(), bool recover = false, bool two_random = false, bool from_legacy16B_lw_seed = false);
     void create_from_keys(const cryptonote::account_public_address& address, const crypto::secret_key& spendkey, const crypto::secret_key& viewkey);
     void create_from_viewkey(const cryptonote::account_public_address& address, const crypto::secret_key& viewkey);

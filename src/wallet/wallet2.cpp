@@ -708,10 +708,24 @@ bool wallet2::is_deterministic() const
   return keys_deterministic;
 }
 //----------------------------------------------------------------------------------------------------
+bool wallet2::is_mymonero_style() const
+{
+  crypto::secret_key first;
+  crypto::coerce_valid_sec_key_from(get_account().get_keys().m_mymonero_key, first);
+  crypto::secret_key second = first;
+  sc_reduce32((uint8_t *)&second);
+  crypto::secret_key third;
+  keccak((uint8_t *)&first, sizeof(crypto::secret_key), (uint8_t *)&third, sizeof(crypto::secret_key));
+  sc_reduce32((uint8_t *)&third);
+
+  return second == get_account().get_keys().m_spend_secret_key && third == get_account().get_keys().m_view_secret_key;
+}
+//----------------------------------------------------------------------------------------------------
 bool wallet2::get_seed(std::string& electrum_words, const epee::wipeable_string &passphrase) const
 {
   bool keys_deterministic = is_deterministic();
-  if (!keys_deterministic)
+  bool mymonero_style = is_mymonero_style();
+  if (!keys_deterministic && !mymonero_style)
   {
     std::cout << "This is not a deterministic wallet" << std::endl;
     return false;
@@ -720,6 +734,21 @@ bool wallet2::get_seed(std::string& electrum_words, const epee::wipeable_string 
   {
     std::cout << "seed_language not set" << std::endl;
     return false;
+  }
+
+  if (mymonero_style)
+  {
+    if (!passphrase.empty())
+    {
+      MERROR("MyMonero-style seed cannot be encrypted");
+      return false;
+    }
+    if (!crypto::ElectrumWords::bytes_to_words(get_account().get_keys().m_mymonero_key, electrum_words, seed_language))
+    {
+      MERROR("Failed to create seed from key for language: " << seed_language);
+      return false;
+    }
+    return true;
   }
 
   crypto::secret_key key = get_account().get_keys().m_spend_secret_key;
@@ -2815,17 +2844,13 @@ void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& 
 }
 
 /*!
- * \brief  Generates a wallet or restores one.
+ * \brief  Restores a wallet from MyMonero-style key.
  * \param  wallet_        Name of wallet file
  * \param  password       Password of wallet file
- * \param  recovery_param If it is a restore, the recovery key
- * \param  recover        Whether it is a restore
- * \param  two_random     Whether it is a non-deterministic wallet
- * \param  from_legacy16B_lw_seed Whether it's a 13 word / 16 byte legacy lightweight wallet seed
- * \return                The secret key of the generated wallet
+ * \param  mymonero_key   16-byte recovery key
  */
-crypto::secret_key wallet2::generate(const std::string& wallet_, const epee::wipeable_string& password,
-  const crypto::secret_key& recovery_param, bool recover, bool two_random, bool from_legacy16B_lw_seed)
+void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& password,
+  const crypto::legacy16B_secret_key& mymonero_key)
 {
   clear();
   prepare_file_names(wallet_);
@@ -2837,7 +2862,61 @@ crypto::secret_key wallet2::generate(const std::string& wallet_, const epee::wip
     THROW_WALLET_EXCEPTION_IF(boost::filesystem::exists(m_keys_file,   ignored_ec), error::file_exists, m_keys_file);
   }
 
-  crypto::secret_key retval = m_account.generate(recovery_param, recover, two_random, from_legacy16B_lw_seed);
+  m_account.generate(mymonero_key);
+
+  m_account_public_address = m_account.get_keys().m_account_address;
+  m_watch_only = false;
+  m_multisig = false;
+  m_multisig_threshold = 0;
+  m_multisig_signers.clear();
+
+  // -1 month for fluctuations in block time and machine date/time setup.
+  // avg seconds per block
+  const int seconds_per_block = DIFFICULTY_TARGET_V2;
+  // ~num blocks per month
+  const uint64_t blocks_per_month = 60*60*24*30/seconds_per_block;
+
+  if (!wallet_.empty())
+  {
+    bool r = store_keys(m_keys_file, password, false);
+    THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
+
+    r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
+    if(!r) MERROR("String with address text not saved");
+  }
+
+  cryptonote::block b;
+  generate_genesis(b);
+  m_blockchain.push_back(get_block_hash(b));
+  add_subaddress_account(tr("Primary account"));
+
+  if (!wallet_.empty())
+    store();
+}
+
+/*!
+ * \brief  Generates a wallet or restores one.
+ * \param  wallet_        Name of wallet file
+ * \param  password       Password of wallet file
+ * \param  recovery_param If it is a restore, the recovery key
+ * \param  recover        Whether it is a restore
+ * \param  two_random     Whether it is a non-deterministic wallet
+ * \return                The secret key of the generated wallet
+ */
+crypto::secret_key wallet2::generate(const std::string& wallet_, const epee::wipeable_string& password,
+  const crypto::secret_key& recovery_param, bool recover, bool two_random)
+{
+  clear();
+  prepare_file_names(wallet_);
+
+  if (!wallet_.empty())
+  {
+    boost::system::error_code ignored_ec;
+    THROW_WALLET_EXCEPTION_IF(boost::filesystem::exists(m_wallet_file, ignored_ec), error::file_exists, m_wallet_file);
+    THROW_WALLET_EXCEPTION_IF(boost::filesystem::exists(m_keys_file,   ignored_ec), error::file_exists, m_keys_file);
+  }
+
+  crypto::secret_key retval = m_account.generate(recovery_param, recover, two_random, false);
 
   m_account_public_address = m_account.get_keys().m_account_address;
   m_watch_only = false;

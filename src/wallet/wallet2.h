@@ -456,18 +456,26 @@ namespace tools
       const std::string& multisig_data);
 
     /*!
+     * \brief  Restores a wallet from MyMonero-style key.
+     * \param  wallet_        Name of wallet file
+     * \param  password       Password of wallet file
+     * \param  mymonero_key   16-byte recovery key
+     */
+    void generate(const std::string& wallet_, const epee::wipeable_string& password,
+      const crypto::legacy16B_secret_key& mymonero_key);
+
+    /*!
      * \brief Generates a wallet or restores one.
      * \param  wallet_        Name of wallet file
      * \param  password       Password of wallet file
      * \param  recovery_param If it is a restore, the recovery key
      * \param  recover        Whether it is a restore
      * \param  two_random     Whether it is a non-deterministic wallet
-     * \param  from_legacy16B_lw_seed Whether it's a 13 word / 16 byte legacy lightweight wallet seed
      * \return                The secret key of the generated wallet
      */
     crypto::secret_key generate(const std::string& wallet, const epee::wipeable_string& password,
       const crypto::secret_key& recovery_param = crypto::secret_key(), bool recover = false,
-      bool two_random = false, bool from_legacy16B_lw_seed = false);
+      bool two_random = false);
     /*!
      * \brief Creates a wallet from a public address and a spend/view secret key pair.
      * \param  wallet_        Name of wallet file
@@ -580,6 +588,7 @@ namespace tools
      * \brief Checks if deterministic wallet
      */
     bool is_deterministic() const;
+    bool is_mymonero_style() const;
     bool get_seed(std::string& electrum_words, const epee::wipeable_string &passphrase = epee::wipeable_string()) const;
 
     /*!
