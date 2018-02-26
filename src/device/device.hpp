@@ -34,6 +34,18 @@
 #include "cryptonote_basic/account.h"
 #include "cryptonote_basic/subaddress_index.h"
 
+#ifndef USE_DEVICE_LEDGER
+#define USE_DEVICE_LEDGER 1
+#endif
+
+#if !defined(HAVE_PCSC) 
+#undef  USE_DEVICE_LEDGER
+#define USE_DEVICE_LEDGER 0
+#endif
+
+#if USE_DEVICE_LEDGER
+#define WITH_DEVICE_LEDGER
+#endif
 
 namespace hw {
     namespace {
@@ -44,21 +56,17 @@ namespace hw {
            return false;
     }
 
-    inline unsigned char *operator &(crypto::ec_scalar &scalar) {
-        return &reinterpret_cast<unsigned char &>(scalar);
-    }
-    inline const unsigned char *operator &(const crypto::ec_scalar &scalar) {
-        return &reinterpret_cast<const unsigned char &>(scalar);
-    }
+    size_t device_init() ;
 
-    class Device {
+
+    class device {
     public:
 
-        Device()  {}
-        Device(const Device &device) {}
-        virtual ~Device()   {}
+        device()  {}
+        device(const device &hwdev) {}
+        virtual ~device()   {}
 
-        //Device& operator=(const Device &device)
+        //device& operator=(const device &hwdev)
         explicit virtual operator bool() const = 0;
 
         static const int SIGNATURE_REAL = 0;
@@ -138,8 +146,8 @@ namespace hw {
         virtual bool  close_tx(void);
     };
 
-    Device& register_device(const std::string device_descriptor, Device& device);
-    Device& get_device(const std::string device_descriptor) ;
+    device& register_device(const std::string device_descriptor, device& hwdev);
+    device& get_device(const std::string device_descriptor) ;
     void register_devices(void);
 }
 

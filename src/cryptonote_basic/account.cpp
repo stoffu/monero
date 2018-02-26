@@ -51,22 +51,15 @@ DISABLE_VS_WARNINGS(4244 4345)
 
   namespace cryptonote
 {
- account_keys& account_keys::operator=(const account_keys &keys) {
-      m_account_address  = keys.m_account_address;
-      m_spend_secret_key = keys.m_spend_secret_key;
-      m_view_secret_key  = keys.m_view_secret_key;
-      m_multisig_keys    = keys.m_multisig_keys;
-      m_device           = keys.m_device;
-      return *this;
-    }
+
   //-----------------------------------------------------------------
-  hw::Device& account_keys::get_device() const  {
+  hw::device& account_keys::get_device() const  {
     return *m_device;
   }
   //-----------------------------------------------------------------
-  void account_keys::set_device( hw::Device &device)  {
-    m_device = &device;
-    MCDEBUG("device", "account_keys::set_device device type: "<<typeid(device).name());
+  void account_keys::set_device( hw::device &hwdev)  {
+    m_device = &hwdev;
+    MCDEBUG("device", "account_keys::set_device device type: "<<typeid(hwdev).name());
   }
 
   //-----------------------------------------------------------------
@@ -140,15 +133,15 @@ DISABLE_VS_WARNINGS(4244 4345)
   void account_base::create_from_device(const std::string &device_name)
   {
 
-    hw::Device &device =  hw::get_device("ledger");// m_keys.get_device();
-    m_keys.set_device(device);
-    device.set_name(device_name);
-    MCDEBUG("ledger", "device type: "<<typeid(device).name());
-    device.init();
-    device.connect();
-    device.get_public_address(m_keys.m_account_address);
+    hw::device &hwdev =  hw::get_device("ledger");// m_keys.get_device();
+    m_keys.set_device(hwdev);
+    hwdev.set_name(device_name);
+    MCDEBUG("ledger", "device type: "<<typeid(hwdev).name());
+    hwdev.init();
+    hwdev.connect();
+    hwdev.get_public_address(m_keys.m_account_address);
     #ifdef DEBUGLEDGER
-    device.get_secret_keys(m_keys.m_view_secret_key, m_keys.m_spend_secret_key);
+    hwdev.get_secret_keys(m_keys.m_view_secret_key, m_keys.m_spend_secret_key);
     #endif
     struct tm timestamp = {0};
     timestamp.tm_year = 2014 - 1900;  // year 2014

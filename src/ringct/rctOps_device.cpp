@@ -36,31 +36,31 @@ using namespace std;
 
 namespace rct
 {
-    void scalarmultKey(key & aP, const key &P, const key &a, hw::Device &device) {
-        device.scalarmultKey(aP, P, a);
+    void scalarmultKey(key & aP, const key &P, const key &a, hw::device &hwdev) {
+        hwdev.scalarmultKey(aP, P, a);
     }
 
-    key scalarmultKey(const key & P, const key & a, hw::Device &device) {
+    key scalarmultKey(const key & P, const key & a, hw::device &hwdev) {
         key aP;
-        device.scalarmultKey(aP, P, a);
+        hwdev.scalarmultKey(aP, P, a);
         return aP;
     }
 
-    void scalarmultBase(key &aG, const key &a, hw::Device &device) {
-        device.scalarmultBase(aG, a);
+    void scalarmultBase(key &aG, const key &a, hw::device &hwdev) {
+        hwdev.scalarmultBase(aG, a);
     }
 
-    key scalarmultBase(const key & a, hw::Device &device) {
+    key scalarmultBase(const key & a, hw::device &hwdev) {
         key aG;
-        device.scalarmultBase(aG, a);
+        hwdev.scalarmultBase(aG, a);
         return aG;
     }
 
-    void ecdhDecode(ecdhTuple & masked, const key & sharedSec, hw::Device &device) {
-        device.ecdhDecode(masked, sharedSec);
+    void ecdhDecode(ecdhTuple & masked, const key & sharedSec, hw::device &hwdev) {
+        hwdev.ecdhDecode(masked, sharedSec);
     }
 
-    void ecdhEncode(ecdhTuple & unmasked, const key & sharedSec, hw::Device &device) {
-        device.ecdhEncode(unmasked, sharedSec);
+    void ecdhEncode(ecdhTuple & unmasked, const key & sharedSec, hw::device &hwdev) {
+        hwdev.ecdhEncode(unmasked, sharedSec);
     }
 }

@@ -31,6 +31,8 @@
 #include "log.hpp"
 
 namespace hw {
+
+    #ifdef WITH_DEVICE_LEDGER    
     namespace ledger {
 
     void buffer_to_str(char *to,  const char *buff, size_t len) {
@@ -152,6 +154,9 @@ namespace hw {
     void check8(std::string msg, std::string info, const char *h, const char *d, bool crypted) {
       check(msg, info, h, d, 8, crypted);
     }
-  #endif
+    #endif
+
   }
+  #endif //WITH_DEVICE_LEDGER    
+
 }

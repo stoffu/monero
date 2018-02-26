@@ -27,6 +27,7 @@
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
+#pragma once
 
 #include <cstddef>
 #include <string>
@@ -34,16 +35,18 @@
 #include "ringct/rctOps.h"
 #include "crypto/crypto.h"
 #include "cryptonote_basic/account.h"
-#pragma once
 
+#include "device.hpp"
 
 namespace hw {
+
+    #ifdef WITH_DEVICE_LEDGER    
     namespace ledger {
 
         void buffer_to_str(char *to,  const char *buff, size_t len) ;
         void log_hexbuffer(std::string msg,  const char* buff, size_t len);
         void log_message(std::string msg,  std::string info );
-#ifdef DEBUGLEDGER
+        #ifdef DEBUGLEDGER
         #define TRACK printf("file %s:%d\n",__FILE__, __LINE__)
         //#define TRACK MCDEBUG("ledger"," At file " << __FILE__ << ":" << __LINE__)
         //#define TRACK while(0);
@@ -60,7 +63,7 @@ namespace hw {
         void check8(std::string msg, std::string info, const char *h, const char *d,  bool crypted=false);
 
         void set_check_verbose(bool verbose);
-
-    #endif
+        #endif
     }
+    #endif
 }

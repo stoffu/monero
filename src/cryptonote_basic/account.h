@@ -44,7 +44,7 @@ namespace cryptonote
     crypto::secret_key   m_spend_secret_key;
     crypto::secret_key   m_view_secret_key;
     std::vector<crypto::secret_key> m_multisig_keys;
-    hw::Device *m_device = &hw::get_device("default");
+    hw::device *m_device = &hw::get_device("default");
 
     BEGIN_KV_SERIALIZE_MAP()
       KV_SERIALIZE(m_account_address)
@@ -53,9 +53,10 @@ namespace cryptonote
       KV_SERIALIZE_CONTAINER_POD_AS_BLOB(m_multisig_keys)
     END_KV_SERIALIZE_MAP()
 
-    account_keys& operator=(const account_keys &keys);
-    hw::Device& get_device()  const ;
-    void set_device( hw::Device &device) ;
+    account_keys& operator=(account_keys const&) = default;
+
+    hw::device& get_device()  const ;
+    void set_device( hw::device &hwdev) ;
   };
 
   /************************************************************************/
@@ -75,8 +76,8 @@ namespace cryptonote
     std::string get_public_address_str(bool testnet) const;
     std::string get_public_integrated_address_str(const crypto::hash8 &payment_id, bool testnet) const;
 
-    hw::Device& get_device() const  {return m_keys.get_device();}
-    void set_device( hw::Device &device) {m_keys.set_device(device);}
+    hw::device& get_device() const  {return m_keys.get_device();}
+    void set_device( hw::device &hwdev) {m_keys.set_device(hwdev);}
 
     uint64_t get_createtime() const { return m_creation_timestamp; }
     void set_createtime(uint64_t val) { m_creation_timestamp = val; }

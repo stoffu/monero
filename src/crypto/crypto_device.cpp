@@ -34,46 +34,46 @@
 
 namespace crypto {
 
-    secret_key generate_keys(public_key &pub, secret_key &sec, const secret_key& recovery_key, bool recover, hw::Device &device) {
+    secret_key generate_keys(public_key &pub, secret_key &sec, const secret_key& recovery_key, bool recover, hw::device &hwdev) {
         secret_key rng;
-        device.generate_keys(pub, sec, recovery_key, recover, rng);
+        hwdev.generate_keys(pub, sec, recovery_key, recover, rng);
         return rng;
     }
 
-    secret_key generate_keys(public_key &pub, secret_key &sec, hw::Device &device) {
+    secret_key generate_keys(public_key &pub, secret_key &sec, hw::device &hwdev) {
         secret_key rng;
-        device.generate_keys(pub, sec,  secret_key(), false, rng);
+        hwdev.generate_keys(pub, sec,  secret_key(), false, rng);
         return rng;
     }
 
 
-    bool secret_key_to_public_key(const secret_key &sec, public_key &pub, hw::Device &device) {
-       return device.secret_key_to_public_key(sec, pub);
+    bool secret_key_to_public_key(const secret_key &sec, public_key &pub, hw::device &hwdev) {
+       return hwdev.secret_key_to_public_key(sec, pub);
     }
 
-    bool generate_key_derivation(const public_key &key1, const secret_key &key2, key_derivation &derivation, hw::Device &device) {
-        return device.generate_key_derivation(key1, key2, derivation);
+    bool generate_key_derivation(const public_key &key1, const secret_key &key2, key_derivation &derivation, hw::device &hwdev) {
+        return hwdev.generate_key_derivation(key1, key2, derivation);
     }
 
-    void derivation_to_scalar(const key_derivation &derivation, size_t output_index, ec_scalar &res, hw::Device &device) {
-        device.derivation_to_scalar(derivation, output_index, res);
+    void derivation_to_scalar(const key_derivation &derivation, size_t output_index, ec_scalar &res, hw::device &hwdev) {
+        hwdev.derivation_to_scalar(derivation, output_index, res);
     }
 
     bool derive_public_key(const key_derivation &derivation, size_t output_index,
-                           const public_key &base, public_key &derived_key, hw::Device &device) {
-        return device.derive_public_key(derivation, output_index, base, derived_key);
+                           const public_key &base, public_key &derived_key, hw::device &hwdev) {
+        return hwdev.derive_public_key(derivation, output_index, base, derived_key);
     }
 
     void derive_secret_key(const key_derivation &derivation, size_t output_index,
-                           const secret_key &base, secret_key &derived_key, hw::Device &device) {
-        device.derive_secret_key(derivation, output_index, base, derived_key);
+                           const secret_key &base, secret_key &derived_key, hw::device &hwdev) {
+        hwdev.derive_secret_key(derivation, output_index, base, derived_key);
     }
 
-    bool derive_subaddress_public_key(const public_key &out_key, const key_derivation &derivation, std::size_t output_index, public_key &derived_key, hw::Device &device) {
-        return device.derive_subaddress_public_key(out_key, derivation, output_index, derived_key);
+    bool derive_subaddress_public_key(const public_key &out_key, const key_derivation &derivation, std::size_t output_index, public_key &derived_key, hw::device &hwdev) {
+        return hwdev.derive_subaddress_public_key(out_key, derivation, output_index, derived_key);
     }
 
-    void generate_key_image(const public_key &pub, const secret_key &sec, key_image &image, hw::Device &device) {
-        device.generate_key_image(pub,sec,image);
+    void generate_key_image(const public_key &pub, const secret_key &sec, key_image &image, hw::device &hwdev) {
+        hwdev.generate_key_image(pub,sec,image);
     }
 }

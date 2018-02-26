@@ -28,7 +28,6 @@
 //
 
 
-#ifdef HAVE_PCSC
 
 #include "device_ledger.hpp"
 #include "log.hpp"
@@ -39,6 +38,9 @@
 namespace hw {
 
   namespace ledger {
+
+  #ifdef WITH_DEVICE_LEDGER
+
     #undef MONERO_DEFAULT_LOG_CATEGORY
     #define MONERO_DEFAULT_LOG_CATEGORY "device.ledged"
 
@@ -55,7 +57,7 @@ namespace hw {
     #define ASSERT_T0(exp)       CHECK_AND_ASSERT_THROW_MES(exp, "Protocol assert failure: "#exp ) ;
 
     #ifdef DEBUGLEDGER
-      #define DEVICE_CONTROLE      ,controle_device(hw::get_device("default"))
+      #define DEVICE_CONTROLE  :controle_device(hw::get_device("default"))
       crypto::secret_key viewkey;
       crypto::secret_key spendkey;
     #else
@@ -160,7 +162,7 @@ namespace hw {
     #define INS_GET_RESPONSE                    0xc0
 
 
-    void DeviceLedger::logCMD() {
+    void device_ledger::logCMD() {
       if (apdu_verbose) {
         char  strbuffer[1024];
         sprintf(strbuffer, "%.02x %.02x %.02x %.02x %.02x ",
@@ -175,7 +177,7 @@ namespace hw {
       }
     }
 
-    void DeviceLedger::logRESP() {
+    void device_ledger::logRESP() {
       if (apdu_verbose) {
         char  strbuffer[1024];
         sprintf(strbuffer, "%.02x%.02x ",
@@ -189,75 +191,56 @@ namespace hw {
     }
 
     /* -------------------------------------------------------------- */
-    DeviceLedger::DeviceLedger() : exiting(false) DEVICE_CONTROLE {
+    device_ledger::device_ledger()  DEVICE_CONTROLE {
       this->id = device_id++;
       this->hCard   = 0;
       this->hContext = 0;
-      this->reset_buffer();
-      if (this->id)
-        MDEBUG( "Device "<<this->id <<" Created");
+      this->reset_buffer();      
+      MDEBUG( "Device "<<this->id <<" Created");
     }
 
-    DeviceLedger::DeviceLedger(const DeviceLedger &device): DeviceLedger() {
-      this->set_name(device.name);
-      MDEBUG( "Device "<<device.id <<" cloned. Device "<<this->id <<" created");
-    }
-
-    DeviceLedger& DeviceLedger::operator=(const DeviceLedger &device) {
-      this->set_name(device.name);
-      this->id = device_id++;
-      this->hCard   = 0;
-      this->hContext = 0;
-      this->reset_buffer();
-      this->exiting = device.exiting;
-      MDEBUG( "Device "<<device.id <<" assigned. Device "<<this->id <<" created");
-      return *this;
-    }
-
-    DeviceLedger::~DeviceLedger() {
-      if (this->id == 0) {
-        exiting = true;
-      }
+    device_ledger::~device_ledger() {
       this->release();
-      if (this->id) {
-        MDEBUG( "Device "<<this->id <<" Destroyed");
-      }
+      MDEBUG( "Device "<<this->id <<" Destroyed");
     }
 
-    void DeviceLedger::lock_device()   {
+    void device_ledger::lock_device()   {
       MDEBUG( "Ask for LOCKING for device "<<this->id);
       device_locker.lock();
       MDEBUG( "Device "<<this->id << " LOCKed");
     }
-    void DeviceLedger::unlock_device() {
-      MDEBUG( "Ask for UNLOCKING for device "<<this->id);
+    void device_ledger::unlock_device() {
+      try {
+        MDEBUG( "Ask for UNLOCKING for device "<<this->id);
+      } catch (...) {
+      }
       device_locker.unlock();
       MDEBUG( "Device "<<this->id << " UNLOCKed");
     }
-    void DeviceLedger::lock_tx()       {
+    void device_ledger::lock_tx()       {
       MDEBUG( "Ask for LOCKING for TX "<<this->id);
       //tx_locker.lock();
       MDEBUG( "TX "<<this->id << " LOCKed");
     }
-    void DeviceLedger::unlock_tx()     {
+    void device_ledger::unlock_tx()     {
       MDEBUG( "Ask for UNLOCKING for TX "<<this->id);
       //tx_locker.unlock();
       MDEBUG( "TX "<<this->id << " UNLOCKed");
     }
 
-    bool DeviceLedger::set_name(const std::string & name) {
+    bool device_ledger::set_name(const std::string & name) {
       this->name = name;
       return true;
     }
 
-    const std::string DeviceLedger::get_name() const {
+    const std::string device_ledger::get_name() const {
       if (this->full_name.empty() || (this->hCard == 0)) {
         return std::string("<disconnected:").append(this->name).append(">");
       }
       return this->full_name;
     }
 
-    bool DeviceLedger::init(void) {
+    bool device_ledger::init(void) {
       LONG  rv;
       this->release();
       rv = SCardEstablishContext(SCARD_SCOPE_SYSTEM,0,0, &this->hContext);
@@ -267,20 +250,18 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::release() {
+    bool device_ledger::release() {
       this->disconnect();
       if (this->hContext) {
         SCardReleaseContext(this->hContext);
-        if (!this->exiting) {
-          MDEBUG( "Device "<<this->id <<" SCardContext released: hContext="<<this->hContext);
-        }
+        MDEBUG( "Device "<<this->id <<" SCardContext released: hContext="<<this->hContext);
         this->hContext = 0;
         this->full_name.clear();
       }
       return true;
     }
 
-    bool DeviceLedger::connect(void) {
+    bool device_ledger::connect(void) {
       BYTE  pbAtr[MAX_ATR_SIZE];
       LPSTR mszReaders;
       DWORD dwReaders;
@@ -344,18 +325,16 @@ namespace hw {
       return rv==SCARD_S_SUCCESS;
     }
 
-    bool DeviceLedger::disconnect() {
+    bool device_ledger::disconnect() {
       if (this->hCard) {
         SCardDisconnect(this->hCard, SCARD_UNPOWER_CARD);
-        if (!this->exiting) {
-          MDEBUG( "Device "<<this->id <<" disconnected: hCard="<<this->hCard); 
-        }
+        MDEBUG( "Device "<<this->id <<" disconnected: hCard="<<this->hCard); 
         this->hCard = 0;
       }
       return true;
     }
 
-    unsigned int DeviceLedger::exchange(unsigned int ok, unsigned int mask) {
+    unsigned int device_ledger::exchange(unsigned int ok, unsigned int mask) {
       LONG rv;
       int sw;
 
@@ -374,7 +353,7 @@ namespace hw {
       return sw;
     }
 
-    void DeviceLedger::reset_buffer() {
+    void device_ledger::reset_buffer() {
       this->length_send = 0;
       memset(this->buffer_send, 0, BUFFER_SEND_SIZE);
       this->length_recv = 0;
@@ -384,7 +363,7 @@ namespace hw {
     /* ======================================================================= */
     /*                                   MISC                                  */
     /* ======================================================================= */
-    bool DeviceLedger::reset() {
+    bool device_ledger::reset() {
 
       lock_device();
       try {
@@ -416,7 +395,7 @@ namespace hw {
     /* ======================================================================= */
 
     /* Application API */
-     bool DeviceLedger::get_public_address(cryptonote::account_public_address &pubkey){
+     bool device_ledger::get_public_address(cryptonote::account_public_address &pubkey){
 
       lock_device();
       try {
@@ -448,7 +427,7 @@ namespace hw {
     }
 
     #ifdef DEBUGLEDGER
-    bool  DeviceLedger::get_secret_keys(crypto::secret_key &viewkey , crypto::secret_key &spendkey) {
+    bool  device_ledger::get_secret_keys(crypto::secret_key &viewkey , crypto::secret_key &spendkey) {
       lock_device();
       try {
         //spcialkey, normal conf handled in decrypt
@@ -481,7 +460,7 @@ namespace hw {
     }
     #endif
 
-    bool  DeviceLedger::generate_chacha_key(const cryptonote::account_keys &keys, crypto::chacha_key &key) {
+    bool  device_ledger::generate_chacha_key(const cryptonote::account_keys &keys, crypto::chacha_key &key) {
       lock_device();
       try {
         int offset;
@@ -527,7 +506,7 @@ namespace hw {
     /*                               SUB ADDRESS                               */
     /* ======================================================================= */
 
-    bool DeviceLedger::derive_subaddress_public_key(const crypto::public_key &pub, const crypto::key_derivation &derivation, const std::size_t output_index, crypto::public_key &derived_pub){
+    bool device_ledger::derive_subaddress_public_key(const crypto::public_key &pub, const crypto::key_derivation &derivation, const std::size_t output_index, crypto::public_key &derived_pub){
 
       lock_device();
       try {
@@ -587,7 +566,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::get_subaddress_spend_public_key(const cryptonote::account_keys& keys, const cryptonote::subaddress_index &index, crypto::public_key &D) {
+    bool device_ledger::get_subaddress_spend_public_key(const cryptonote::account_keys& keys, const cryptonote::subaddress_index &index, crypto::public_key &D) {
       lock_device();
       try {
         int offset =0;
@@ -639,7 +618,7 @@ namespace hw {
       return true;
     }
 
-    bool  DeviceLedger::get_subaddress_spend_public_keys(const cryptonote::account_keys &keys, uint32_t account, uint32_t begin, uint32_t end, std::vector<crypto::public_key> &pkeys) {
+    bool  device_ledger::get_subaddress_spend_public_keys(const cryptonote::account_keys &keys, uint32_t account, uint32_t begin, uint32_t end, std::vector<crypto::public_key> &pkeys) {
      cryptonote::subaddress_index index = {account, begin};
      crypto::public_key D;
      for (uint32_t idx = begin; idx < end; ++idx) {
@@ -650,7 +629,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::get_subaddress(const cryptonote::account_keys& keys, const cryptonote::subaddress_index &index, cryptonote::account_public_address &address) {
+    bool device_ledger::get_subaddress(const cryptonote::account_keys& keys, const cryptonote::subaddress_index &index, cryptonote::account_public_address &address) {
       lock_device();
       try {
         int offset =0;
@@ -703,7 +682,7 @@ namespace hw {
       return true;
     }
 
-    bool  DeviceLedger::get_subaddress_secret_key(const crypto::secret_key &sec, const cryptonote::subaddress_index &index, crypto::secret_key &sub_sec) {
+    bool  device_ledger::get_subaddress_secret_key(const crypto::secret_key &sec, const cryptonote::subaddress_index &index, crypto::secret_key &sub_sec) {
       lock_device();
       try {
         int offset =0;
@@ -758,7 +737,7 @@ namespace hw {
     /*                            DERIVATION & KEY                             */
     /* ======================================================================= */
 
-    bool  DeviceLedger::verify_keys(const crypto::secret_key &secret_key, const crypto::public_key &public_key) {
+    bool  device_ledger::verify_keys(const crypto::secret_key &secret_key, const crypto::public_key &public_key) {
       lock_device();
       try {
         int offset =0,sw;
@@ -799,7 +778,7 @@ namespace hw {
       return false;
     }
 
-    bool DeviceLedger::scalarmultKey(rct::key & aP, const rct::key &P, const rct::key &a) {
+    bool device_ledger::scalarmultKey(rct::key & aP, const rct::key &P, const rct::key &a) {
       lock_device();
       try {
         int offset =0;
@@ -852,7 +831,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::scalarmultBase(rct::key &aG, const rct::key &a) {
+    bool device_ledger::scalarmultBase(rct::key &aG, const rct::key &a) {
       lock_device();
       try {
         int offset =0;
@@ -900,7 +879,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::sc_secret_add( crypto::secret_key &r, const crypto::secret_key &a, const crypto::secret_key &b) {
+    bool device_ledger::sc_secret_add( crypto::secret_key &r, const crypto::secret_key &a, const crypto::secret_key &b) {
 
       lock_device();
       try {
@@ -954,7 +933,7 @@ namespace hw {
       return true;
     }
 
-    bool  DeviceLedger::generate_keys(crypto::public_key &pub, crypto::secret_key &sec, const crypto::secret_key& recovery_key, bool recover, crypto::secret_key &rng) {
+    bool  device_ledger::generate_keys(crypto::public_key &pub, crypto::secret_key &sec, const crypto::secret_key& recovery_key, bool recover, crypto::secret_key &rng) {
       if (recover) {
         throw std::runtime_error("device generate key does not support recover");
       }
@@ -1009,7 +988,7 @@ namespace hw {
 
     }
 
-    bool DeviceLedger::generate_key_derivation(const crypto::public_key &pub, const crypto::secret_key &sec, crypto::key_derivation &derivation) {
+    bool device_ledger::generate_key_derivation(const crypto::public_key &pub, const crypto::secret_key &sec, crypto::key_derivation &derivation) {
       lock_device();
       try {
         int offset =0;
@@ -1063,7 +1042,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::derivation_to_scalar(const crypto::key_derivation &derivation, const size_t output_index, crypto::ec_scalar &res) {
+    bool device_ledger::derivation_to_scalar(const crypto::key_derivation &derivation, const size_t output_index, crypto::ec_scalar &res) {
       lock_device();
       try {
         int offset;
@@ -1119,7 +1098,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::derive_secret_key(const crypto::key_derivation &derivation, const std::size_t output_index, const crypto::secret_key &sec, crypto::secret_key &derived_sec) {
+    bool device_ledger::derive_secret_key(const crypto::key_derivation &derivation, const std::size_t output_index, const crypto::secret_key &sec, crypto::secret_key &derived_sec) {
       lock_device();
       try {
         int offset;
@@ -1179,7 +1158,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::derive_public_key(const crypto::key_derivation &derivation, const std::size_t output_index, const crypto::public_key &pub, crypto::public_key &derived_pub){
+    bool device_ledger::derive_public_key(const crypto::key_derivation &derivation, const std::size_t output_index, const crypto::public_key &pub, crypto::public_key &derived_pub){
       lock_device();
       try {
         int offset;
@@ -1238,7 +1217,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::secret_key_to_public_key(const crypto::secret_key &sec, crypto::public_key &pub) {
+    bool device_ledger::secret_key_to_public_key(const crypto::secret_key &sec, crypto::public_key &pub) {
       lock_device();
       try {
         int offset;
@@ -1286,7 +1265,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::generate_key_image(const crypto::public_key &pub, const crypto::secret_key &sec, crypto::key_image &image){
+    bool device_ledger::generate_key_image(const crypto::public_key &pub, const crypto::secret_key &sec, crypto::key_image &image){
       lock_device();
       try {
         int offset;
@@ -1342,7 +1321,7 @@ namespace hw {
     /*                               TRANSACTION                               */
     /* ======================================================================= */
 
-    bool DeviceLedger::open_tx(crypto::secret_key &tx_key) {
+    bool device_ledger::open_tx(crypto::secret_key &tx_key) {
       lock_device();
       try {
         int offset =0;
@@ -1381,7 +1360,7 @@ namespace hw {
       return true;
     }
 
-    bool  DeviceLedger::set_signature_mode(unsigned int sig_mode) {
+    bool  device_ledger::set_signature_mode(unsigned int sig_mode) {
       lock_device();
       try {
         int offset =0;
@@ -1413,7 +1392,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::encrypt_payment_id(const crypto::public_key &public_key, const crypto::secret_key &secret_key, crypto::hash8 &payment_id) {
+    bool device_ledger::encrypt_payment_id(const crypto::public_key &public_key, const crypto::secret_key &secret_key, crypto::hash8 &payment_id) {
       lock_device();
       try {
         int offset =0;
@@ -1464,7 +1443,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::add_output_key_mapping(const crypto::public_key &Aout, const crypto::public_key &Bout, size_t real_output_index,
+    bool device_ledger::add_output_key_mapping(const crypto::public_key &Aout, const crypto::public_key &Bout, size_t real_output_index,
                                         const rct::key &amount_key,  const crypto::public_key &out_eph_public_key)  {
       lock_device();
       try {
@@ -1477,7 +1456,7 @@ namespace hw {
       return true;
     }
 
-    bool  DeviceLedger::ecdhEncode(rct::ecdhTuple & unmasked, const rct::key & AKout) {
+    bool  device_ledger::ecdhEncode(rct::ecdhTuple & unmasked, const rct::key & AKout) {
       lock_device();
       try {
         int offset =0;
@@ -1532,7 +1511,7 @@ namespace hw {
       return true;
     }
 
-    bool  DeviceLedger::ecdhDecode(rct::ecdhTuple & masked, const rct::key & AKout) {
+    bool  device_ledger::ecdhDecode(rct::ecdhTuple & masked, const rct::key & AKout) {
       lock_device();
       try {
         int offset =0;
@@ -1585,7 +1564,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::mlsag_prehash(const std::string &blob, size_t inputs_size, size_t outputs_size,
+    bool device_ledger::mlsag_prehash(const std::string &blob, size_t inputs_size, size_t outputs_size,
                                      const rct::keyV &hashes, const rct::ctkeyV &outPk,
                                      rct::key &prehash) {
 
@@ -1787,7 +1766,7 @@ namespace hw {
     }
 
 
-    bool DeviceLedger::mlsag_prepare(const rct::key &H, const rct::key &xx,
+    bool device_ledger::mlsag_prepare(const rct::key &H, const rct::key &xx,
                                      rct::key &a, rct::key &aG, rct::key &aHP, rct::key &II) {
       lock_device();
       try {
@@ -1849,7 +1828,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::mlsag_prepare(rct::key &a, rct::key &aG) {
+    bool device_ledger::mlsag_prepare(rct::key &a, rct::key &aG) {
       lock_device();
       try {
         int offset =0;
@@ -1893,7 +1872,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::mlsag_hash(const rct::keyV &long_message, rct::key &c) {
+    bool device_ledger::mlsag_hash(const rct::keyV &long_message, rct::key &c) {
       lock_device();
       try {
         int offset =0;
@@ -1944,7 +1923,7 @@ namespace hw {
 
     }
 
-    bool DeviceLedger::mlsag_sign(const rct::key &c, const rct::keyV &xx, const rct::keyV &alpha, const size_t rows, const size_t dsRows, rct::keyV &ss) {
+    bool device_ledger::mlsag_sign(const rct::key &c, const rct::keyV &xx, const rct::keyV &alpha, const size_t rows, const size_t dsRows, rct::keyV &ss) {
       lock_device();
       try {
         int offset =0;
@@ -2013,7 +1992,7 @@ namespace hw {
       return true;
     }
 
-    bool DeviceLedger::close_tx() {
+    bool device_ledger::close_tx() {
       lock_device();
       try {
         int offset =0;
@@ -2046,12 +2025,21 @@ namespace hw {
 
     /* ---------------------------------------------------------- */
 
-    static DeviceLedger legder_device;
+    static device_ledger *legder_device = NULL;
     void register_all() {
-      register_device("ledger", legder_device);
+      if (!legder_device) {
+        legder_device = new device_ledger();
+      }
+      register_device("ledger", *legder_device);
     }
+  
+  #else //WITH_DEVICE_LEDGER
+  
+    void register_all() {
+    }
+
+  #endif //WITH_DEVICE_LEDGER
 
   }
 }
 
-#endif //HAVE_PCSC

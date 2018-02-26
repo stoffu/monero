@@ -35,8 +35,8 @@
 //#define IONOCRYPT 1
 
 namespace hw {
-    class Device;
+    class device;
 
-    Device& get_device(std::string device_descriptor);
+    device& get_device(std::string device_descriptor);
 }
 

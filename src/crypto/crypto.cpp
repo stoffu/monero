@@ -161,7 +161,7 @@ namespace crypto {
     ge_tobytes(&derivation, &point2);
     return true;
   }
- 
+
   void crypto_ops::derivation_to_scalar(const key_derivation &derivation, size_t output_index, ec_scalar &res) {
     struct {
       key_derivation derivation;

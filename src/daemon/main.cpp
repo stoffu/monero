@@ -45,6 +45,7 @@
 #include "daemon/command_line_args.h"
 #include "blockchain_db/db_types.h"
 #include "version.h"
+#include "device/device.hpp"
 
 #ifdef STACK_TRACE
 #include "common/stack_trace.h"
@@ -63,7 +64,7 @@ int main(int argc, char const * argv[])
     // TODO parse the debug options like set log level right here at start
 
     tools::on_startup();
-
+    
     epee::string_tools::set_module_name_and_folder(argv[0]);
 
     // Build argument description
