@@ -453,7 +453,7 @@ namespace tools
      * \param  multisig_data  The multisig restore info and keys
      */
     void generate(const std::string& wallet_, const epee::wipeable_string& password,
-      const std::string& multisig_data);
+      const std::string& multisig_data, bool create_address_file = false);
 
     /*!
      * \brief Generates a wallet or restores one.
@@ -466,7 +466,7 @@ namespace tools
      */
     crypto::secret_key generate(const std::string& wallet, const epee::wipeable_string& password,
       const crypto::secret_key& recovery_param = crypto::secret_key(), bool recover = false,
-      bool two_random = false);
+      bool two_random = false, bool create_address_file = false);
     /*!
      * \brief Creates a wallet from a public address and a spend/view secret key pair.
      * \param  wallet_        Name of wallet file
@@ -476,7 +476,7 @@ namespace tools
      */
     void generate(const std::string& wallet, const epee::wipeable_string& password,
       const cryptonote::account_public_address &account_public_address,
-      const crypto::secret_key& spendkey, const crypto::secret_key& viewkey);
+      const crypto::secret_key& spendkey, const crypto::secret_key& viewkey, bool create_address_file = false);
     /*!
      * \brief Creates a watch only wallet from a public address and a view secret key.
      * \param  wallet_        Name of wallet file
@@ -485,7 +485,7 @@ namespace tools
      */
     void generate(const std::string& wallet, const epee::wipeable_string& password,
       const cryptonote::account_public_address &account_public_address,
-      const crypto::secret_key& viewkey = crypto::secret_key());
+      const crypto::secret_key& viewkey = crypto::secret_key(), bool create_address_file = false);
     /*!
      * \brief Creates a multisig wallet
      * \return empty if done, non empty if we need to send another string
@@ -600,11 +600,6 @@ namespace tools
      * \brief Sets the seed language
      */
     void set_seed_language(const std::string &language);
-
-    /*!
-     * \brief Sets whether or not to create an address file
-     */
-    void set_create_address_file(const bool &create);
 
     // Subaddress scheme
     cryptonote::account_public_address get_subaddress(const cryptonote::subaddress_index& index) const;
@@ -1142,7 +1137,6 @@ namespace tools
     NodeRPCProxy m_node_rpc_proxy;
     std::unordered_set<crypto::hash> m_scanned_pool_txs[2];
     size_t m_subaddress_lookahead_major, m_subaddress_lookahead_minor;
-    bool m_create_address_file;
 
     // Light wallet
     bool m_light_wallet; /* sends view key to daemon for scanning */

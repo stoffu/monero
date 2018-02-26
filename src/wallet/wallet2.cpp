@@ -118,7 +118,6 @@ struct options {
   const command_line::arg_descriptor<std::string> daemon_login = {"daemon-login", tools::wallet2::tr("Specify username[:password] for daemon RPC client"), "", true};
   const command_line::arg_descriptor<bool> testnet = {"testnet", tools::wallet2::tr("For testnet. Daemon must also be launched with --testnet flag"), false};
   const command_line::arg_descriptor<bool> restricted = {"restricted-rpc", tools::wallet2::tr("Restricts to view-only commands"), false};
-  const command_line::arg_descriptor<bool> create_address_file = {"create-address-file", tools::wallet2::tr("Create an address file for new wallets"), false};
 };
 
 void do_prepare_file_names(const std::string& file_path, std::string& keys_file, std::string& wallet_file)
@@ -160,7 +159,6 @@ std::unique_ptr<tools::wallet2> make_basic(const boost::program_options::variabl
 {
   const bool testnet = command_line::get_arg(vm, opts.testnet);
   const bool restricted = command_line::get_arg(vm, opts.restricted);
-  const bool create_address_file = testnet || command_line::get_arg(vm, opts.create_address_file);
 
   auto daemon_address = command_line::get_arg(vm, opts.daemon_address);
   auto daemon_host = command_line::get_arg(vm, opts.daemon_host);
@@ -196,7 +194,6 @@ std::unique_ptr<tools::wallet2> make_basic(const boost::program_options::variabl
 
   std::unique_ptr<tools::wallet2> wallet(new tools::wallet2(testnet, restricted));
   wallet->init(std::move(daemon_address), std::move(login));
-  wallet->set_create_address_file(create_address_file);
   return wallet;
 }
 
@@ -316,6 +313,9 @@ std::unique_ptr<tools::wallet2> generate_from_json(const std::string& json_file,
 
     GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, address, std::string, String, false, std::string());
 
+    GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, create_address_file, int, Int, false, false);
+    bool create_address_file = field_create_address_file;
+
     // compatibility checks
     if (!field_seed_found && !field_viewkey_found && !field_spendkey_found)
     {
@@ -370,11 +370,11 @@ std::unique_ptr<tools::wallet2> generate_from_json(const std::string& json_file,
     {
       if (!field_seed.empty())
       {
-        wallet->generate(field_filename, field_password, recovery_key, recover, false);
+        wallet->generate(field_filename, field_password, recovery_key, recover, false, create_address_file);
       }
       else if (field_viewkey.empty() && !field_spendkey.empty())
       {
-        wallet->generate(field_filename, field_password, spendkey, recover, false);
+        wallet->generate(field_filename, field_password, spendkey, recover, false, create_address_file);
       }
       else
       {
@@ -400,14 +400,14 @@ std::unique_ptr<tools::wallet2> generate_from_json(const std::string& json_file,
           {
             THROW_WALLET_EXCEPTION(tools::error::wallet_internal_error, tools::wallet2::tr("Address must be specified in order to create watch-only wallet"));
           }
-          wallet->generate(field_filename, field_password, address, viewkey);
+          wallet->generate(field_filename, field_password, address, viewkey, create_address_file);
         }
         else
         {
           if (!crypto::secret_key_to_public_key(spendkey, address.m_spend_public_key)) {
             THROW_WALLET_EXCEPTION(tools::error::wallet_internal_error, tools::wallet2::tr("failed to verify spend key secret key"));
           }
-          wallet->generate(field_filename, field_password, address, spendkey, viewkey);
+          wallet->generate(field_filename, field_password, address, spendkey, viewkey, create_address_file);
         }
       }
     }
@@ -621,7 +621,6 @@ wallet2::wallet2(bool testnet, bool restricted):
   m_node_rpc_proxy(m_http_client, m_daemon_rpc_mutex),
   m_subaddress_lookahead_major(SUBADDRESS_LOOKAHEAD_MAJOR),
   m_subaddress_lookahead_minor(SUBADDRESS_LOOKAHEAD_MINOR),
-  m_create_address_file(false),
   m_light_wallet(false),
   m_light_wallet_scanned_block_height(0),
   m_light_wallet_blockchain_height(0),
@@ -647,7 +646,6 @@ void wallet2::init_options(boost::program_options::options_description& desc_par
   command_line::add_arg(desc_params, opts.daemon_login);
   command_line::add_arg(desc_params, opts.testnet);
   command_line::add_arg(desc_params, opts.restricted);
-  command_line::add_arg(desc_params, opts.create_address_file);
 }
 
 std::unique_ptr<wallet2> wallet2::make_from_json(const boost::program_options::variables_map& vm, const std::string& json_file, const std::function<boost::optional<tools::password_container>(const char *, bool)> &password_prompter)
@@ -818,15 +816,6 @@ const std::string &wallet2::get_seed_language() const
 void wallet2::set_seed_language(const std::string &language)
 {
   seed_language = language;
-}
-//----------------------------------------------------------------------------------------------------
-/*!
- * \brief Sets whether or not to create an address file
- * \param create  Whether or not to create an address file
- */
-void wallet2::set_create_address_file(const bool &create)
-{
-  m_create_address_file = create;
 }
 //----------------------------------------------------------------------------------------------------
 cryptonote::account_public_address wallet2::get_subaddress(const cryptonote::subaddress_index& index) const
@@ -2752,7 +2741,7 @@ bool wallet2::verify_password(const std::string& keys_file_name, const epee::wip
  * \param  multisig_data  The multisig restore info and keys
  */
 void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& password,
-  const std::string& multisig_data)
+  const std::string& multisig_data, bool create_address_file)
 {
   clear();
   prepare_file_names(wallet_);
@@ -2823,7 +2812,7 @@ void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& 
     bool r = store_keys(m_keys_file, password, false);
     THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
 
-    if (m_create_address_file)
+    if (m_testnet || create_address_file)
     {
       r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
       if(!r) MERROR("String with address text not saved");
@@ -2849,7 +2838,7 @@ void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& 
  * \return                The secret key of the generated wallet
  */
 crypto::secret_key wallet2::generate(const std::string& wallet_, const epee::wipeable_string& password,
-  const crypto::secret_key& recovery_param, bool recover, bool two_random)
+  const crypto::secret_key& recovery_param, bool recover, bool two_random, bool create_address_file)
 {
   clear();
   prepare_file_names(wallet_);
@@ -2886,7 +2875,7 @@ crypto::secret_key wallet2::generate(const std::string& wallet_, const epee::wip
     bool r = store_keys(m_keys_file, password, false);
     THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
 
-    if (m_create_address_file)
+    if (m_testnet || create_address_file)
     {
       r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
       if(!r) MERROR("String with address text not saved");
@@ -2944,7 +2933,7 @@ crypto::secret_key wallet2::generate(const std::string& wallet_, const epee::wip
 */
 void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& password,
   const cryptonote::account_public_address &account_public_address,
-  const crypto::secret_key& viewkey)
+  const crypto::secret_key& viewkey, bool create_address_file)
 {
   clear();
   prepare_file_names(wallet_);
@@ -2968,7 +2957,7 @@ void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& 
     bool r = store_keys(m_keys_file, password, true);
     THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
 
-    if (m_create_address_file)
+    if (m_testnet || create_address_file)
     {
       r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
       if(!r) MERROR("String with address text not saved");
@@ -2993,7 +2982,7 @@ void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& 
 */
 void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& password,
   const cryptonote::account_public_address &account_public_address,
-  const crypto::secret_key& spendkey, const crypto::secret_key& viewkey)
+  const crypto::secret_key& spendkey, const crypto::secret_key& viewkey, bool create_address_file)
 {
   clear();
   prepare_file_names(wallet_);
@@ -3017,7 +3006,7 @@ void wallet2::generate(const std::string& wallet_, const epee::wipeable_string& 
     bool r = store_keys(m_keys_file, password, false);
     THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
 
-    if (m_create_address_file)
+    if (m_testnet || create_address_file)
     {
       r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
       if(!r) MERROR("String with address text not saved");
@@ -3111,7 +3100,7 @@ std::string wallet2::make_multisig(const epee::wipeable_string &password,
     bool r = store_keys(m_keys_file, password, false);
     THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
 
-    if (m_create_address_file)
+    if (boost::filesystem::exists(m_wallet_file + ".address.txt"))
     {
       r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
       if(!r) MERROR("String with address text not saved");
@@ -3214,7 +3203,7 @@ bool wallet2::finalize_multisig(const epee::wipeable_string &password, std::unor
     bool r = store_keys(m_keys_file, password, false);
     THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
 
-    if (m_create_address_file)
+    if (boost::filesystem::exists(m_wallet_file + ".address.txt"))
     {
       r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
       if(!r) MERROR("String with address text not saved");
@@ -3748,10 +3737,10 @@ void wallet2::store_to(const std::string &path, const epee::wipeable_string &pas
     prepare_file_names(path);
     bool r = store_keys(m_keys_file, password, false);
     THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
-    if (m_create_address_file)
+    if (boost::filesystem::exists(old_address_file))
     {
       // save address to the new file
-      const std::string address_file = m_wallet_file + ".address.txt";
+      const std::string address_file = new_file + ".address.txt";
       r = file_io_utils::save_string_to_file(address_file, m_account.get_public_address_str(m_testnet));
       THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_wallet_file);
     }

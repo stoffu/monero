@@ -72,11 +72,12 @@ namespace
   const command_line::arg_descriptor<uint32_t> arg_participants = {"participants", genms::tr("How many participants wil share parts of the multisig wallet"), 0};
   const command_line::arg_descriptor<uint32_t> arg_threshold = {"threshold", genms::tr("How many signers are required to sign a valid transaction"), 0};
   const command_line::arg_descriptor<bool, false> arg_testnet = {"testnet", genms::tr("Create testnet multisig wallets"), false};
+  const command_line::arg_descriptor<bool> arg_create_address_file = {"create-address-file", tools::wallet2::tr("Create an address file for new wallets"), false};
 
   const command_line::arg_descriptor< std::vector<std::string> > arg_command = {"command", ""};
 }
 
-static bool generate_multisig(uint32_t threshold, uint32_t total, const std::string &basename, bool testnet)
+static bool generate_multisig(uint32_t threshold, uint32_t total, const std::string &basename, bool testnet, bool create_address_file)
 {
   tools::msg_writer() << (boost::format(genms::tr("Generating %u %u/%u multisig wallets")) % total % threshold % total).str();
 
@@ -91,7 +92,7 @@ static bool generate_multisig(uint32_t threshold, uint32_t total, const std::str
       std::string name = basename + "-" + std::to_string(n + 1);
       wallets[n].reset(new tools::wallet2(testnet));
       wallets[n]->init("");
-      wallets[n]->generate(name, pwd_container->password(), rct::rct2sk(rct::skGen()), false, false);
+      wallets[n]->generate(name, pwd_container->password(), rct::rct2sk(rct::skGen()), false, false, create_address_file);
     }
 
     // gather the keys
@@ -169,6 +170,7 @@ int main(int argc, char* argv[])
   command_line::add_arg(desc_params, arg_threshold);
   command_line::add_arg(desc_params, arg_participants);
   command_line::add_arg(desc_params, arg_testnet);
+  command_line::add_arg(desc_params, arg_create_address_file);
 
   const auto vm = wallet_args::main(
    argc, argv,
@@ -187,6 +189,7 @@ int main(int argc, char* argv[])
   std::string basename;
 
   testnet = command_line::get_arg(*vm, arg_testnet);
+  bool create_address_file = command_line::get_arg(*vm, arg_create_address_file);
   if (command_line::has_arg(*vm, arg_scheme))
   {
     if (sscanf(command_line::get_arg(*vm, arg_scheme).c_str(), "%u/%u", &threshold, &total) != 2)
@@ -233,7 +236,7 @@ int main(int argc, char* argv[])
     tools::fail_msg_writer() << genms::tr("Error: unsupported scheme: only N/N and N-1/N are supported");
     return 1;
   }
-  if (!generate_multisig(threshold, total, basename, testnet))
+  if (!generate_multisig(threshold, total, basename, testnet, create_address_file))
     return 1;
 
   return 0;
