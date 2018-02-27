@@ -461,7 +461,7 @@ link_directories(${LIBUNWIND_LIBRARY_DIRS})
 # Final setup for libpcsc
 if (PCSC_FOUND) 
   add_definitions(-DHAVE_PCSC)
-  include_directories(${LIBPCSC_INCLUDE})
+  include_directories(${PCSC_INCLUDE_DIR})
   link_directories(${LIBPCSC_LIBRARY_DIRS})
 endif()
 

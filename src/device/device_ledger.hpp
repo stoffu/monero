@@ -42,9 +42,9 @@ namespace hw {
 
     namespace ledger {
 
-    void register_all();
+    void register_all(std::map<std::string, std::unique_ptr<device>> &registry);
 
-#ifdef WITH_DEVICE_LEDGER
+    #ifdef WITH_DEVICE_LEDGER
 
     namespace {
         bool apdu_verbose =true;
@@ -122,6 +122,7 @@ namespace hw {
         /*                              SETUP/TEARDOWN                             */
         /* ======================================================================= */
         bool set_name(const std::string &name) override;
+
         const std::string get_name() const override;
         bool init(void) override;
         bool release() override;
@@ -132,9 +133,7 @@ namespace hw {
         /*                             WALLET & ADDRESS                            */
         /* ======================================================================= */
         bool  get_public_address(cryptonote::account_public_address &pubkey) override;
-        #ifdef DEBUGLEDGER
         bool  get_secret_keys(crypto::secret_key &viewkey , crypto::secret_key &spendkey) override;
-        #endif
         bool  generate_chacha_key(const cryptonote::account_keys &keys, crypto::chacha_key &key) override;
 
 

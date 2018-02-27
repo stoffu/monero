@@ -35,7 +35,7 @@ namespace hw {
 
     namespace core {
 
-        void register_all();
+        void register_all(std::map<std::string, std::unique_ptr<device>> &registry);
 
         class device_default : public hw::device {
         public:
@@ -50,18 +50,22 @@ namespace hw {
              /* ======================================================================= */
             /*                              SETUP/TEARDOWN                             */
             /* ======================================================================= */
+            bool set_name(const std::string &name);
+            const std::string get_name() const;
 
+            bool init(void);
+            bool release();
+
+            bool connect(void);
+            bool disconnect();
 
             /* ======================================================================= */
             /*                             WALLET & ADDRESS                            */
             /* ======================================================================= */
-            //bool  get_public_address(cryptonote::account_public_address &pubkey);
-            #ifdef DEBUGLEDGER
-            //bool  get_secret_keys(crypto::secret_key &viewkey , crypto::secret_key &spendkey);
-            #endif
+            bool  get_public_address(cryptonote::account_public_address &pubkey);
+            bool  get_secret_keys(crypto::secret_key &viewkey , crypto::secret_key &spendkey);
             bool  generate_chacha_key(const cryptonote::account_keys &keys, crypto::chacha_key &key);
-
-
+ 
             /* ======================================================================= */
             /*                               SUB ADDRESS                               */
             /* ======================================================================= */

@@ -46,10 +46,10 @@
 #include "hex.h"
 #include "span.h"
 #include "hash.h"
-extern "C" {
-#include "crypto-ops.h"
-}
 #include "device/device_declare.hpp"
+extern "C" {
+  #include "crypto-ops.h"
+}
 
 namespace crypto {
 

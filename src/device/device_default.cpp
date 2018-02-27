@@ -54,13 +54,43 @@ namespace hw {
         }
 
         /* ======================================================================= */
+        /*                              SETUP/TEARDOWN                             */
+        /* ======================================================================= */
+        bool device_default::set_name(const std::string &name)  {
+            this->name = name;
+            return true;
+        }
+        const std::string device_default::get_name()  const {
+            return this->name;
+        }
+        
+        bool device_default::init(void) {
+            dfns();
+        }
+        bool device_default::release() {
+            dfns();
+        }
+
+        bool device_default::connect(void) {
+            dfns();
+        }
+        bool device_default::disconnect() {
+            dfns();
+        }
+
+        /* ======================================================================= */
         /*                             WALLET & ADDRESS                            */
         /* ======================================================================= */
 
         bool  device_default::generate_chacha_key(const cryptonote::account_keys &keys, crypto::chacha_key &key) {
             return cryptonote::generate_chacha_key_from_secret_keys(keys, key);
         }
-
+        bool  device_default::get_public_address(cryptonote::account_public_address &pubkey) {
+             dfns();
+        }
+        bool  device_default::get_secret_keys(crypto::secret_key &viewkey , crypto::secret_key &spendkey)  {
+             dfns();
+        }
         /* ======================================================================= */
         /*                               SUB ADDRESS                               */
         /* ======================================================================= */
@@ -217,13 +247,14 @@ namespace hw {
 
 
         /* ---------------------------------------------------------- */
-
         static device_default *default_core_device = NULL;
-        void register_all() {
+        void register_all(std::map<std::string, std::unique_ptr<device>> &registry) {
             if (!default_core_device) {
                 default_core_device = new device_default();
+                default_core_device->set_name("default_core_device");
+
             }
-            register_device("default", *default_core_device);
+            registry.insert(std::make_pair("default",default_core_device));
         }
 
 

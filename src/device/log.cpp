@@ -34,24 +34,25 @@ namespace hw {
 
     #ifdef WITH_DEVICE_LEDGER    
     namespace ledger {
+    
+    #undef MONERO_DEFAULT_LOG_CATEGORY
+    #define MONERO_DEFAULT_LOG_CATEGORY "device.ledger"
 
-    void buffer_to_str(char *to,  const char *buff, size_t len) {
+    void buffer_to_str(char *to_buff,  size_t to_len, const char *buff, size_t len) {
+      CHECK_AND_ASSERT_THROW_MES(to_len > (len*2), "destination buffer too short. At least" << (len*2+1) << " bytes required");
       for (size_t i=0; i<len; i++) {
-        sprintf(to+2*i, "%.02x", (unsigned char)buff[i]);
+        sprintf(to_buff+2*i, "%.02x", (unsigned char)buff[i]);
       }
     }
 
     void log_hexbuffer(std::string msg,  const char* buff, size_t len) {
       char logstr[1025];
-      if (len>512) {
-        len = 512;
-      }
-      buffer_to_str(logstr,  buff, len);
-      MCDEBUG("ledger", msg<< ": " << logstr);
+      buffer_to_str(logstr, sizeof(logstr),  buff, len);
+      MDEBUG(msg<< ": " << logstr);
     }
 
     void log_message(std::string msg,  std::string info ) {
-      MCDEBUG("ledger", msg << ": " << info);
+      MDEBUG(msg << ": " << info);
     }
 
     #ifdef DEBUGLEDGER
@@ -133,6 +134,7 @@ namespace hw {
 
       memmove(dd,d,len);
       if (crypted) {
+        CHECK_AND_ASSERT_THROW_MES(len<=32, "encrypted data greater than 32");
         decrypt(dd,len);
       }
 

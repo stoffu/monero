@@ -60,7 +60,6 @@ using namespace epee;
 #include <boost/algorithm/string.hpp>
 #include <boost/asio.hpp>
 #include <openssl/sha.h>
-#include "device/device.hpp"
 
 namespace tools
 {
@@ -572,7 +571,6 @@ std::string get_nix_version_display_string()
     if (!unbound_built_with_threads())
       MCLOG_RED(el::Level::Warning, "global", "libunbound was not built with threads enabled - crashes may occur");
 
-    hw::device_init();
     return true;
   }
   void set_strict_default_file_permissions(bool strict)

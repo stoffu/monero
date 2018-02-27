@@ -30,7 +30,7 @@
 #pragma once
 
 
-//#define DEBUGLEDGER
+//#define DEBUG_HWDEVICE
 //#define IODUMMYCRYPT 1
 //#define IONOCRYPT 1
 

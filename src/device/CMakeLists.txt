@@ -60,7 +60,7 @@ monero_add_library(device
 
 target_link_libraries(device
   PUBLIC
-    pcsclite
+    ${PCSC_LIBRARIES}
     crypto
     ringct
     ${OPENSSL_CRYPTO_LIBRARIES}

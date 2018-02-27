@@ -34,7 +34,6 @@
 #include "blockchain_db/blockchain_db.h"
 #include "blockchain_db/db_types.h"
 #include "version.h"
-#include "device/device.hpp"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "bcutil"

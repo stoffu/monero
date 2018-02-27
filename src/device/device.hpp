@@ -56,8 +56,6 @@ namespace hw {
            return false;
     }
 
-    size_t device_init() ;
-
 
     class device {
     public:
@@ -66,7 +64,6 @@ namespace hw {
         device(const device &hwdev) {}
         virtual ~device()   {}
 
-        //device& operator=(const device &hwdev)
         explicit virtual operator bool() const = 0;
 
         static const int SIGNATURE_REAL = 0;
@@ -78,76 +75,72 @@ namespace hw {
         /* ======================================================================= */
         /*                              SETUP/TEARDOWN                             */
         /* ======================================================================= */
-        virtual bool set_name(const std::string &name);
-        virtual const std::string get_name() const;
+        virtual bool set_name(const std::string &name) = 0;
+        virtual const std::string get_name() const = 0;
 
-        virtual  bool init(void);
-        virtual bool release();
+        virtual  bool init(void) = 0;
+        virtual bool release() = 0;
 
-        virtual bool connect(void);
-        virtual bool disconnect();
+        virtual bool connect(void) = 0;
+        virtual bool disconnect() = 0;
 
         /* ======================================================================= */
         /*                             WALLET & ADDRESS                            */
         /* ======================================================================= */
-        virtual bool  get_public_address(cryptonote::account_public_address &pubkey);
-        virtual bool  get_secret_keys(crypto::secret_key &viewkey , crypto::secret_key &spendkey) ;
-        virtual bool  generate_chacha_key(const cryptonote::account_keys &keys, crypto::chacha_key &key);
-
+        virtual bool  get_public_address(cryptonote::account_public_address &pubkey) = 0;
+        virtual bool  get_secret_keys(crypto::secret_key &viewkey , crypto::secret_key &spendkey)  = 0;
+        virtual bool  generate_chacha_key(const cryptonote::account_keys &keys, crypto::chacha_key &key) = 0;
 
         /* ======================================================================= */
         /*                               SUB ADDRESS                               */
         /* ======================================================================= */
-        virtual bool  derive_subaddress_public_key(const crypto::public_key &pub, const crypto::key_derivation &derivation, const std::size_t output_index,  crypto::public_key &derived_pub);
-        virtual bool  get_subaddress_spend_public_key(const cryptonote::account_keys& keys, const cryptonote::subaddress_index& index, crypto::public_key &D);
-        virtual bool  get_subaddress_spend_public_keys(const cryptonote::account_keys &keys, uint32_t account, uint32_t begin, uint32_t end, std::vector<crypto::public_key> &pkeys);
-        virtual bool  get_subaddress(const cryptonote::account_keys& keys, const cryptonote::subaddress_index &index, cryptonote::account_public_address &address);
-        virtual bool  get_subaddress_secret_key(const crypto::secret_key &sec, const cryptonote::subaddress_index &index, crypto::secret_key &sub_sec);
+        virtual bool  derive_subaddress_public_key(const crypto::public_key &pub, const crypto::key_derivation &derivation, const std::size_t output_index,  crypto::public_key &derived_pub) = 0;
+        virtual bool  get_subaddress_spend_public_key(const cryptonote::account_keys& keys, const cryptonote::subaddress_index& index, crypto::public_key &D) = 0;
+        virtual bool  get_subaddress_spend_public_keys(const cryptonote::account_keys &keys, uint32_t account, uint32_t begin, uint32_t end, std::vector<crypto::public_key> &pkeys) = 0;
+        virtual bool  get_subaddress(const cryptonote::account_keys& keys, const cryptonote::subaddress_index &index, cryptonote::account_public_address &address) = 0;
+        virtual bool  get_subaddress_secret_key(const crypto::secret_key &sec, const cryptonote::subaddress_index &index, crypto::secret_key &sub_sec) = 0;
 
         /* ======================================================================= */
         /*                            DERIVATION & KEY                             */
         /* ======================================================================= */
-        virtual bool  verify_keys(const crypto::secret_key &secret_key, const crypto::public_key &public_key);
-        virtual bool  scalarmultKey(rct::key & aP, const rct::key &P, const rct::key &a);
-        virtual bool  scalarmultBase(rct::key &aG, const rct::key &a);
-        virtual bool  sc_secret_add( crypto::secret_key &r, const crypto::secret_key &a, const crypto::secret_key &b);
-        virtual bool  generate_keys(crypto::public_key &pub, crypto::secret_key &sec, const crypto::secret_key& recovery_key, bool recover, crypto::secret_key &rng);
-        virtual bool  generate_key_derivation(const crypto::public_key &pub, const crypto::secret_key &sec, crypto::key_derivation &derivation);
-        virtual bool  derivation_to_scalar(const crypto::key_derivation &derivation, const size_t output_index, crypto::ec_scalar &res);
-        virtual bool  derive_secret_key(const crypto::key_derivation &derivation, const std::size_t output_index, const crypto::secret_key &sec,  crypto::secret_key &derived_sec);
-        virtual bool  derive_public_key(const crypto::key_derivation &derivation, const std::size_t output_index, const crypto::public_key &pub,  crypto::public_key &derived_pub);
-        virtual bool  secret_key_to_public_key(const crypto::secret_key &sec, crypto::public_key &pub);
-        virtual bool  generate_key_image(const crypto::public_key &pub, const crypto::secret_key &sec, crypto::key_image &image);
+        virtual bool  verify_keys(const crypto::secret_key &secret_key, const crypto::public_key &public_key) = 0;
+        virtual bool  scalarmultKey(rct::key & aP, const rct::key &P, const rct::key &a) = 0;
+        virtual bool  scalarmultBase(rct::key &aG, const rct::key &a) = 0;
+        virtual bool  sc_secret_add( crypto::secret_key &r, const crypto::secret_key &a, const crypto::secret_key &b) = 0;
+        virtual bool  generate_keys(crypto::public_key &pub, crypto::secret_key &sec, const crypto::secret_key& recovery_key, bool recover, crypto::secret_key &rng) = 0;
+        virtual bool  generate_key_derivation(const crypto::public_key &pub, const crypto::secret_key &sec, crypto::key_derivation &derivation) = 0;
+        virtual bool  derivation_to_scalar(const crypto::key_derivation &derivation, const size_t output_index, crypto::ec_scalar &res) = 0;
+        virtual bool  derive_secret_key(const crypto::key_derivation &derivation, const std::size_t output_index, const crypto::secret_key &sec,  crypto::secret_key &derived_sec) = 0;
+        virtual bool  derive_public_key(const crypto::key_derivation &derivation, const std::size_t output_index, const crypto::public_key &pub,  crypto::public_key &derived_pub) = 0;
+        virtual bool  secret_key_to_public_key(const crypto::secret_key &sec, crypto::public_key &pub) = 0;
+        virtual bool  generate_key_image(const crypto::public_key &pub, const crypto::secret_key &sec, crypto::key_image &image) = 0;
 
         /* ======================================================================= */
         /*                               TRANSACTION                               */
         /* ======================================================================= */
 
-        virtual bool  open_tx(crypto::secret_key &tx_key);
+        virtual bool  open_tx(crypto::secret_key &tx_key) = 0;
 
-        virtual bool  get_additional_key(const bool subaddr, cryptonote::keypair &additional_txkey);
-        virtual bool  set_signature_mode(unsigned int sig_mode);
+        virtual bool  set_signature_mode(unsigned int sig_mode) = 0;
 
-        virtual bool  encrypt_payment_id(const crypto::public_key &public_key, const crypto::secret_key &secret_key, crypto::hash8 &payment_id );
+        virtual bool  encrypt_payment_id(const crypto::public_key &public_key, const crypto::secret_key &secret_key, crypto::hash8 &payment_id ) = 0;
 
-        virtual bool  ecdhEncode(rct::ecdhTuple & unmasked, const rct::key & sharedSec);
-        virtual bool  ecdhDecode(rct::ecdhTuple & masked, const rct::key & sharedSec);
+        virtual bool  ecdhEncode(rct::ecdhTuple & unmasked, const rct::key & sharedSec) = 0;
+        virtual bool  ecdhDecode(rct::ecdhTuple & masked, const rct::key & sharedSec) = 0;
 
         virtual bool  add_output_key_mapping(const crypto::public_key &Aout, const crypto::public_key &Bout, size_t real_output_index,
-                                            const rct::key &amount_key,  const crypto::public_key &out_eph_public_key);
+                                            const rct::key &amount_key,  const crypto::public_key &out_eph_public_key) = 0;
 
 
-        virtual bool  mlsag_prehash(const std::string &blob, size_t inputs_size, size_t outputs_size, const rct::keyV &hashes, const rct::ctkeyV &outPk, rct::key &prehash);
-        virtual bool  mlsag_prepare(const rct::key &H, const rct::key &xx, rct::key &a, rct::key &aG, rct::key &aHP, rct::key &rvII);
-        virtual bool  mlsag_prepare(rct::key &a, rct::key &aG);
-        virtual bool  mlsag_hash(const rct::keyV &long_message, rct::key &c);
-        virtual bool  mlsag_sign(const rct::key &c, const rct::keyV &xx, const rct::keyV &alpha, const size_t rows, const size_t dsRows, rct::keyV &ss);
+        virtual bool  mlsag_prehash(const std::string &blob, size_t inputs_size, size_t outputs_size, const rct::keyV &hashes, const rct::ctkeyV &outPk, rct::key &prehash) = 0;
+        virtual bool  mlsag_prepare(const rct::key &H, const rct::key &xx, rct::key &a, rct::key &aG, rct::key &aHP, rct::key &rvII) = 0;
+        virtual bool  mlsag_prepare(rct::key &a, rct::key &aG) = 0;
+        virtual bool  mlsag_hash(const rct::keyV &long_message, rct::key &c) = 0;
+        virtual bool  mlsag_sign(const rct::key &c, const rct::keyV &xx, const rct::keyV &alpha, const size_t rows, const size_t dsRows, rct::keyV &ss) = 0;
 
-        virtual bool  close_tx(void);
-    };
+        virtual bool  close_tx(void) = 0;
+    } ;
 
-    device& register_device(const std::string device_descriptor, device& hwdev);
     device& get_device(const std::string device_descriptor) ;
-    void register_devices(void);
 }
 
