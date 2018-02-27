@@ -487,7 +487,10 @@ namespace tools
       const cryptonote::account_public_address &account_public_address,
       const crypto::secret_key& viewkey = crypto::secret_key());
     /*!
-     *
+     * \brief Restore a wallet hold by an HW.
+     * \param  wallet_        Name of wallet file
+     * \param  password       Password of wallet file
+     * \param  device_name    name of HW to use
      */
     void restore(const std::string& wallet_, const epee::wipeable_string& password, const std::string &device_name);
 
