@@ -43,7 +43,7 @@
 #include "cryptonote_basic/miner.h"
 
 #include "chaingen.h"
-#include "device/device.hpp"
+
 using namespace std;
 
 using namespace epee;

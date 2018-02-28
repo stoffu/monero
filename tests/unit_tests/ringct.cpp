@@ -37,7 +37,6 @@
 #include "ringct/rctTypes.h"
 #include "ringct/rctSigs.h"
 #include "ringct/rctOps.h"
-#include "device/device.hpp"
 
 using namespace std;
 using namespace crypto;

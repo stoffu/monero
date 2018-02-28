@@ -329,7 +329,7 @@ namespace hw {
 
       this->disconnect();
 
-      dwReaders = SCARD_AUTOALLOCATE;
+      dwReaders = 0;//SCARD_AUTOALLOCATE; TODO
       if ((rv = SCardListReaders(this->hContext, NULL, (LPSTR)&mszReaders, &dwReaders)) == SCARD_S_SUCCESS) {
         char* p;
         const char* prefix = this->name.c_str();
@@ -360,7 +360,7 @@ namespace hw {
       }
 
       if (mszReaders) {
-        SCardFreeMemory(this->hContext, mszReaders);
+        // SCardFreeMemory(this->hContext, mszReaders); TODO
         mszReaders = NULL;
       }
       if (rv != SCARD_S_SUCCESS) {
@@ -605,7 +605,7 @@ namespace hw {
           this->buffer_send[offset] = 0x00;
           offset += 1;
           //index
-          static_assert(sizeof(cryptonote::subaddress_index) == 8);
+          static_assert(sizeof(cryptonote::subaddress_index) == 8, "unexpected size of subaddress_index");
           memmove(this->buffer_send+offset, &index, sizeof(cryptonote::subaddress_index));
           offset +=8 ;
 
@@ -667,7 +667,7 @@ namespace hw {
           this->buffer_send[offset] = 0x00;
           offset += 1;
           //index
-          static_assert(sizeof(cryptonote::subaddress_index) == 8);
+          static_assert(sizeof(cryptonote::subaddress_index) == 8, "unexpected size of subaddress_index");
           memmove(this->buffer_send+offset, &index, sizeof(cryptonote::subaddress_index));
           offset +=8 ;
 
@@ -720,7 +720,7 @@ namespace hw {
         memmove(this->buffer_send+offset, sec.data, 32);
         offset += 32;
         //index
-        static_assert(sizeof(cryptonote::subaddress_index) == 8);
+        static_assert(sizeof(cryptonote::subaddress_index) == 8, "unexpected size of subaddress_index");
         memmove(this->buffer_send+offset, &index, sizeof(cryptonote::subaddress_index));
         offset +=8 ;
 

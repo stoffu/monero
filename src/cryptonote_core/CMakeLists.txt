@@ -61,7 +61,6 @@ target_link_libraries(cryptonote_core
     blockchain_db
     multisig
     ringct
-    device
     ${Boost_DATE_TIME_LIBRARY}
     ${Boost_PROGRAM_OPTIONS_LIBRARY}
     ${Boost_SERIALIZATION_LIBRARY}

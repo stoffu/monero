@@ -45,26 +45,26 @@ namespace hw {
             device_default(const device_default &device) = delete;
             device_default& operator=(const device_default &device) = delete;
 
-            explicit operator bool() const { return false; };
+            explicit operator bool() const override { return false; };
 
              /* ======================================================================= */
             /*                              SETUP/TEARDOWN                             */
             /* ======================================================================= */
-            bool set_name(const std::string &name);
-            const std::string get_name() const;
+            bool set_name(const std::string &name) override;
+            const std::string get_name() const override;
 
-            bool init(void);
-            bool release();
+            bool init(void) override;
+            bool release() override;
 
-            bool connect(void);
-            bool disconnect();
+            bool connect(void) override;
+            bool disconnect() override;
 
             /* ======================================================================= */
             /*                             WALLET & ADDRESS                            */
             /* ======================================================================= */
-            bool  get_public_address(cryptonote::account_public_address &pubkey);
-            bool  get_secret_keys(crypto::secret_key &viewkey , crypto::secret_key &spendkey);
-            bool  generate_chacha_key(const cryptonote::account_keys &keys, crypto::chacha_key &key);
+            bool  get_public_address(cryptonote::account_public_address &pubkey) override;
+            bool  get_secret_keys(crypto::secret_key &viewkey , crypto::secret_key &spendkey) override;
+            bool  generate_chacha_key(const cryptonote::account_keys &keys, crypto::chacha_key &key) override;
  
             /* ======================================================================= */
             /*                               SUB ADDRESS                               */

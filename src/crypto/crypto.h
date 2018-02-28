@@ -47,9 +47,6 @@
 #include "span.h"
 #include "hash.h"
 #include "device/device_declare.hpp"
-extern "C" {
-  #include "crypto-ops.h"
-}
 
 namespace crypto {
 
@@ -117,9 +114,6 @@ namespace crypto {
     void operator=(const crypto_ops &);
     ~crypto_ops();
 
-    static void hash_to_ec(const public_key &key, ge_p3 &res) ;
-    friend void hash_to_ec(const public_key &key, ge_p3 &res) ;
-
     static secret_key generate_keys(public_key &pub, secret_key &sec, const secret_key& recovery_key = secret_key(), bool recover = false);
     friend secret_key generate_keys(public_key &pub, secret_key &sec, const secret_key& recovery_key, bool recover);
     static bool check_key(const public_key &);
@@ -184,9 +178,6 @@ namespace crypto {
     return res;
   }
 
-  inline void hash_to_ec(const public_key &key, ge_p3 &res) {
-    crypto_ops::hash_to_ec(key,res);
-  }
   /* Generate a new key pair
    */
   inline secret_key generate_keys(public_key &pub, secret_key &sec, const secret_key& recovery_key = secret_key(), bool recover = false) {

@@ -52,8 +52,7 @@ namespace hw {
 
     void set_apdu_verbose(bool verbose);
 
-    class ABPkeys {
-    public:
+    struct ABPkeys {
         rct::key Aout;
         rct::key Bout;
         size_t   index;
@@ -64,9 +63,8 @@ namespace hw {
         ABPkeys() {index=0;}
     };
 
-    class Keymap {
-    public:
-        std::vector<struct ABPkeys> ABP;
+    struct Keymap {
+        std::vector<ABPkeys> ABP;
 
         bool find(const rct::key& P, ABPkeys& keys) const;
         void add(const ABPkeys& keys);
@@ -114,7 +112,7 @@ namespace hw {
         device_ledger(const device_ledger &device) = delete ;
         device_ledger& operator=(const device_ledger &device) = delete;
 
-        explicit operator bool() const {return this->hContext != 0;}
+        explicit operator bool() const override {return this->hContext != 0;}
 
         bool  reset(void);
 

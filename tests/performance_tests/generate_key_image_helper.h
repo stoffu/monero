@@ -35,7 +35,6 @@
 #include "cryptonote_basic/cryptonote_format_utils.h"
 
 #include "single_tx_test_base.h"
-#include "device/device.hpp"
 
 class test_generate_key_image_helper : public single_tx_test_base
 {

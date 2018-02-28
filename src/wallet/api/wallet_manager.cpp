@@ -151,7 +151,7 @@ bool WalletManagerImpl::walletExists(const std::string &path)
 
 bool WalletManagerImpl::verifyWalletPassword(const std::string &keys_file_name, const std::string &password, bool no_spend_key) const
 {
-	    return tools::wallet2::verify_password(keys_file_name, password, no_spend_key);
+	    // return tools::wallet2::verify_password(keys_file_name, password, no_spend_key);
 }
 
 std::vector<std::string> WalletManagerImpl::findWallets(const std::string &path)
