@@ -62,3 +62,14 @@ namespace hw {
     }
 
 }
+
+namespace cryptonote
+{
+    keypair keypair::generate(hw::device &hwdev)
+    {
+        keypair k;
+        crypto::secret_key rng;
+        hwdev.generate_keys(k.pub, k.sec, crypto::secret_key(), false, rng);
+        return k;
+    }
+}

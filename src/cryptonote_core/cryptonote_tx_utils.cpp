@@ -235,7 +235,7 @@ namespace cryptonote
             return false;
           }
 
-          if (!encrypt_payment_id(payment_id, view_key_pub, tx_key, hwdev))
+          if (!hwdev.encrypt_payment_id(view_key_pub, tx_key, payment_id))
           {
             LOG_ERROR("Failed to encrypt payment id");
             return false;
@@ -341,11 +341,11 @@ namespace cryptonote
     // if this is a single-destination transfer to a subaddress, we set the tx pubkey to R=s*D
     if (num_stdaddresses == 0 && num_subaddresses == 1)
     {
-      txkey_pub = rct::rct2pk(rct::scalarmultKey(rct::pk2rct(single_dest_subaddress.m_spend_public_key), rct::sk2rct(tx_key), hwdev));
+      hwdev.scalarmultKey((rct::key &)txkey_pub, rct::pk2rct(single_dest_subaddress.m_spend_public_key), rct::sk2rct(tx_key));
     }
     else
     {
-      txkey_pub = rct::rct2pk(rct::scalarmultBase(rct::sk2rct(tx_key), hwdev));
+      hwdev.scalarmultBase((rct::key &)txkey_pub, rct::sk2rct(tx_key));
     }
     remove_field_from_tx_extra(tx.extra, typeid(tx_extra_pub_key));
     add_tx_pub_key_to_extra(tx, txkey_pub);
@@ -374,22 +374,22 @@ namespace cryptonote
       {
         additional_txkey.sec = additional_tx_keys[output_index];
         if (dst_entr.is_subaddress)
-          additional_txkey.pub = rct::rct2pk(rct::scalarmultKey(rct::pk2rct(dst_entr.addr.m_spend_public_key), rct::sk2rct(additional_txkey.sec),hwdev));
+          hwdev.scalarmultKey((rct::key &)additional_txkey.pub, rct::pk2rct(dst_entr.addr.m_spend_public_key), rct::sk2rct(additional_txkey.sec));
         else
-          additional_txkey.pub = rct::rct2pk(rct::scalarmultBase(rct::sk2rct(additional_txkey.sec), hwdev));
+          hwdev.scalarmultBase((rct::key &)additional_txkey.pub, rct::sk2rct(additional_txkey.sec));
       }
 
       bool r;
       if (change_addr && dst_entr.addr == *change_addr)
       {
         // sending change to yourself; derivation = a*R
-        r = crypto::generate_key_derivation(txkey_pub, sender_account_keys.m_view_secret_key, derivation, hwdev);
+        r = hwdev.generate_key_derivation(txkey_pub, sender_account_keys.m_view_secret_key, derivation);
         CHECK_AND_ASSERT_MES(r, false, "at creation outs: failed to generate_key_derivation(" << txkey_pub << ", " << sender_account_keys.m_view_secret_key << ")");
       }
       else
       {
         // sending to the recipient; derivation = r*A (or s*C in the subaddress scheme)
-        r = crypto::generate_key_derivation(dst_entr.addr.m_view_public_key, dst_entr.is_subaddress && need_additional_txkeys ? additional_txkey.sec : tx_key, derivation, hwdev);
+        r = hwdev.generate_key_derivation(dst_entr.addr.m_view_public_key, dst_entr.is_subaddress && need_additional_txkeys ? additional_txkey.sec : tx_key, derivation);
         CHECK_AND_ASSERT_MES(r, false, "at creation outs: failed to generate_key_derivation(" << dst_entr.addr.m_view_public_key << ", " << (dst_entr.is_subaddress && need_additional_txkeys ? additional_txkey.sec : tx_key) << ")");
       }
 
@@ -401,10 +401,10 @@ namespace cryptonote
       if (tx.version > 1)
       {
         crypto::secret_key scalar1;
-        crypto::derivation_to_scalar(derivation, output_index, scalar1, hwdev);
+        hwdev.derivation_to_scalar(derivation, output_index, scalar1);
         amount_keys.push_back(rct::sk2rct(scalar1));
       }
-      r = crypto::derive_public_key(derivation, output_index, dst_entr.addr.m_spend_public_key, out_eph_public_key, hwdev);
+      r = hwdev.derive_public_key(derivation, output_index, dst_entr.addr.m_spend_public_key, out_eph_public_key);
       CHECK_AND_ASSERT_MES(r, false, "at creation outs: failed to derive_public_key(" << derivation << ", " << output_index << ", "<< dst_entr.addr.m_spend_public_key << ")");
 
       hwdev.add_output_key_mapping(dst_entr.addr.m_view_public_key, dst_entr.addr.m_spend_public_key, output_index, amount_keys.back(), out_eph_public_key);

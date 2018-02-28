@@ -49,6 +49,7 @@
 #include "misc_language.h"
 #include "tx_extra.h"
 #include "ringct/rctTypes.h"
+#include "device/device_declare.hpp"
 
 namespace cryptonote
 {
@@ -434,12 +435,7 @@ namespace cryptonote
       generate_keys(k.pub, k.sec);
       return k;
     }
-    static inline keypair generate(hw::device &hwdev)
-    {
-      keypair k;
-      generate_keys(k.pub, k.sec, hwdev);
-      return k;
-    }
+    static keypair generate(hw::device &hwdev);
   };
   //---------------------------------------------------------------
 

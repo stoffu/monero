@@ -61,8 +61,8 @@ monero_add_library(device
 target_link_libraries(device
   PUBLIC
     ${PCSC_LIBRARIES}
-    crypto
-    ringct
+    cncrypto
+    ringct_basic
     ${OPENSSL_CRYPTO_LIBRARIES}
     ${GNU_READLINE_LIBRARY}
     ${EPEE_READLINE}
