@@ -5482,13 +5482,13 @@ bool wallet2::find_and_save_rings()
   return true;
 }
 
-bool wallet2::tx_add_fake_output(std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, uint64_t global_index, const crypto::public_key& tx_public_key, const rct::key& mask, uint64_t real_index, bool unlocked) const
+bool wallet2::tx_add_fake_output(std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, uint64_t global_index, const crypto::public_key& output_public_key, const rct::key& mask, uint64_t real_index, bool unlocked) const
 {
   if (!unlocked) // don't add locked outs
     return false;
   if (global_index == real_index) // don't re-add real one
     return false;
-  auto item = std::make_tuple(global_index, tx_public_key, mask);
+  auto item = std::make_tuple(global_index, output_public_key, mask);
   CHECK_AND_ASSERT_MES(!outs.empty(), false, "internal error: outs is empty");
   if (std::find(outs.back().begin(), outs.back().end(), item) != outs.back().end()) // don't add duplicates
     return false;
