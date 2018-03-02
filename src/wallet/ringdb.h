@@ -48,13 +48,20 @@ namespace tools
     bool get_ring(const crypto::chacha_key &chacha_key, const crypto::key_image &key_image, std::vector<uint64_t> &outs, bool relative = false);
     bool set_ring(const crypto::chacha_key &chacha_key, const crypto::key_image &key_image, const std::vector<uint64_t> &outs, bool relative);
 
+    bool blackball(const crypto::public_key &output);
+    bool unblackball(const crypto::public_key &output);
+    bool blackballed(const crypto::public_key &output);
+    bool clear_blackballs();
+
   private:
     bool rings_worker(const crypto::chacha_key &chacha_key, const cryptonote::transaction_prefix &tx, int op);
     bool ring_worker(const crypto::chacha_key &chacha_key, const crypto::key_image &key_image, std::vector<uint64_t> &outs, bool relative, int op);
+    bool blackball_worker(const crypto::public_key &output, int op);
 
   private:
     std::string filename;
     MDB_env *env;
     MDB_dbi dbi_rings;
+    MDB_dbi dbi_blackballs;
   };
 }

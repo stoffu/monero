@@ -1029,6 +1029,11 @@ namespace tools
     bool set_ring(const crypto::key_image &key_image, const std::vector<uint64_t> &outs, bool relative);
     bool find_and_save_rings();
 
+    bool blackball_output(const crypto::public_key &output);
+    bool set_blackballed_outputs(const std::list<crypto::public_key> &outputs, bool add = false);
+    bool unblackball_output(const crypto::public_key &output);
+    bool is_output_blackballed(const crypto::public_key &output) const;
+
   private:
     /*!
      * \brief  Stores wallet information to wallet file.

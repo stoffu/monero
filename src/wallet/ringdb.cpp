@@ -172,6 +172,7 @@ static size_t get_ring_data_size(size_t n_entries)
 
 enum { RINGS_ADD, RINGS_REMOVE};
 enum { RING_GET, RING_SET};
+enum { BLACKBALL_BLACKBALL, BLACKBALL_UNBLACKBALL, BLACKBALL_QUERY, BLACKBALL_CLEAR};
 
 namespace tools
 {
@@ -203,6 +204,10 @@ ringdb::ringdb(const std::string &filename):
   THROW_WALLET_EXCEPTION_IF(dbr, tools::error::wallet_internal_error, "Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
   mdb_set_compare(txn, dbi_rings, compare_hash32);
 
+  dbr = mdb_dbi_open(txn, "blackballs", MDB_CREATE | MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, &dbi_blackballs);
+  THROW_WALLET_EXCEPTION_IF(dbr, tools::error::wallet_internal_error, "Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
+  mdb_set_dupsort(txn, dbi_blackballs, compare_hash32);
+
   dbr = mdb_txn_commit(txn);
   THROW_WALLET_EXCEPTION_IF(dbr, tools::error::wallet_internal_error, "Failed to commit txn adding ring to database: " + std::string(mdb_strerror(dbr)));
   tx_active = false;
@@ -211,6 +216,7 @@ ringdb::ringdb(const std::string &filename):
 ringdb::~ringdb()
 {
   mdb_dbi_close(env, dbi_rings);
+  mdb_dbi_close(env, dbi_blackballs);
   mdb_env_close(env);
 }
 
@@ -364,6 +370,84 @@ bool ringdb::set_ring(const crypto::chacha_key &chacha_key, const crypto::key_im
 {
   std::vector<uint64_t> outs_copy = outs;
   return ring_worker(chacha_key, key_image, outs_copy, relative, RING_SET);
+}
+
+bool ringdb::blackball_worker(const crypto::public_key &output, int op)
+{
+  MDB_txn *txn;
+  MDB_cursor *cursor;
+  int dbr;
+  bool tx_active = false;
+  bool ret = true;
+
+  dbr = resize_env(env, filename.c_str(), 32 * 2); // a pubkey, and some slack
+  THROW_WALLET_EXCEPTION_IF(dbr, tools::error::wallet_internal_error, "Failed to set env map size: " + std::string(mdb_strerror(dbr)));
+  dbr = mdb_txn_begin(env, NULL, 0, &txn);
+  THROW_WALLET_EXCEPTION_IF(dbr, tools::error::wallet_internal_error, "Failed to create LMDB transaction: " + std::string(mdb_strerror(dbr)));
+  epee::misc_utils::auto_scope_leave_caller txn_dtor = epee::misc_utils::create_scope_leave_handler([&](){if (tx_active) mdb_txn_abort(txn);});
+  tx_active = true;
+
+  MDB_val key = zerokeyval;
+  MDB_val data;
+  data.mv_data = (void*)&output;
+  data.mv_size = sizeof(output);
+
+  switch (op)
+  {
+    case BLACKBALL_BLACKBALL:
+      MDEBUG("Blackballing output " << output);
+      dbr = mdb_put(txn, dbi_blackballs, &key, &data, MDB_NODUPDATA);
+      if (dbr == MDB_KEYEXIST)
+        dbr = 0;
+      break;
+    case BLACKBALL_UNBLACKBALL:
+      MDEBUG("Unblackballing output " << output);
+      dbr = mdb_del(txn, dbi_blackballs, &key, &data);
+      if (dbr == MDB_NOTFOUND)
+        dbr = 0;
+      break;
+    case BLACKBALL_QUERY:
+      dbr = mdb_cursor_open(txn, dbi_blackballs, &cursor);
+      THROW_WALLET_EXCEPTION_IF(dbr, tools::error::wallet_internal_error, "Failed to create cursor for blackballs table: " + std::string(mdb_strerror(dbr)));
+      dbr = mdb_cursor_get(cursor, &key, &data, MDB_GET_BOTH);
+      THROW_WALLET_EXCEPTION_IF(dbr && dbr != MDB_NOTFOUND, tools::error::wallet_internal_error, "Failed to lookup in blackballs table: " + std::string(mdb_strerror(dbr)));
+      ret = dbr != MDB_NOTFOUND;
+      if (dbr == MDB_NOTFOUND)
+        dbr = 0;
+      mdb_cursor_close(cursor);
+      break;
+    case BLACKBALL_CLEAR:
+      dbr = mdb_drop(txn, dbi_blackballs, 1);
+      break;
+    default:
+      THROW_WALLET_EXCEPTION(tools::error::wallet_internal_error, "Invalid blackball op");
+  }
+  THROW_WALLET_EXCEPTION_IF(dbr, tools::error::wallet_internal_error, "Failed to query blackballs table: " + std::string(mdb_strerror(dbr)));
+
+  dbr = mdb_txn_commit(txn);
+  THROW_WALLET_EXCEPTION_IF(dbr, tools::error::wallet_internal_error, "Failed to commit txn blackballing output to database: " + std::string(mdb_strerror(dbr)));
+  tx_active = false;
+  return ret;
+}
+
+bool ringdb::blackball(const crypto::public_key &output)
+{
+  return blackball_worker(output, BLACKBALL_BLACKBALL);
+}
+
+bool ringdb::unblackball(const crypto::public_key &output)
+{
+  return blackball_worker(output, BLACKBALL_UNBLACKBALL);
+}
+
+bool ringdb::blackballed(const crypto::public_key &output)
+{
+  return blackball_worker(output, BLACKBALL_QUERY);
+}
+
+bool ringdb::clear_blackballs()
+{
+  return blackball_worker(crypto::public_key(), BLACKBALL_CLEAR);
 }
 
 }
