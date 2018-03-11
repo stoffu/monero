@@ -50,6 +50,7 @@ public:
   ~PerformanceTimer();
   void pause();
   void resume();
+  uint64_t value() const;
 
 private:
   std::string name;
