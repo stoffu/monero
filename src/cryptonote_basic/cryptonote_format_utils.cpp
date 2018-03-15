@@ -934,7 +934,7 @@ namespace cryptonote
   {
     blobdata bd = get_block_hashing_blob(b);
     const int cn_variant = b.major_version >= 2 ? b.major_version - 1 : 0;
-    crypto::cn_slow_hash(bd.data(), bd.size(), res, height >= HARDFORK_1_HEIGHT, cn_variant);
+    crypto::cn_slow_hash(bd.data(), bd.size(), res, height >= HARDFORK_1_HEIGHT || b.major_version >= 2, cn_variant);   // on testnet, switch to CryptoNight-Lite occurs when it forks to v2
     return true;
   }
   //---------------------------------------------------------------
