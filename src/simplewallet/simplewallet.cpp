@@ -1646,6 +1646,21 @@ bool simple_wallet::set_auto_low_priority(const std::vector<std::string> &args/*
   return true;
 }
 
+bool simple_wallet::set_subaddress_lookahead(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
+{
+  const auto pwd_container = get_and_verify_password();
+  if (pwd_container)
+  {
+    auto lookahead = parse_subaddress_lookahead(args[1]);
+    if (lookahead)
+    {
+      m_wallet->set_subaddress_lookahead(lookahead->first, lookahead->second);
+      m_wallet->rewrite(m_wallet_file, pwd_container->password());
+    }
+  }
+  return true;
+}
+
 bool simple_wallet::help(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
 {
   if(args.empty())
@@ -1820,7 +1835,9 @@ simple_wallet::simple_wallet()
                                   "refresh-from-block-height [n]\n "
                                   "  Set the height before which to ignore blocks.\n "
                                   "auto-low-priority <1|0>\n "
-                                  "  Whether to automatically use the low priority fee level when it's safe to do so."));
+                                  "  Whether to automatically use the low priority fee level when it's safe to do so.\n "
+                                  "subaddress-lookahead <major>:<minor>\n "
+                                  "  Set the lookahead sizes for the subaddress hash table."));
   m_cmd_binder.set_handler("encrypted_seed",
                            boost::bind(&simple_wallet::encrypted_seed, this, _1),
                            tr("Display the encrypted Electrum-style mnemonic seed."));
@@ -1988,6 +2005,8 @@ bool simple_wallet::set_variable(const std::vector<std::string> &args)
     success_msg_writer() << "confirm-export-overwrite = " << m_wallet->confirm_export_overwrite();
     success_msg_writer() << "refresh-from-block-height = " << m_wallet->get_refresh_from_block_height();
     success_msg_writer() << "auto-low-priority = " << m_wallet->auto_low_priority();
+    const std::pair<size_t, size_t> lookahead = m_wallet->get_subaddress_lookahead();
+    success_msg_writer() << "subaddress-lookahead = " << lookahead.first << ":" << lookahead.second;
     return true;
   }
   else
@@ -2038,6 +2057,7 @@ bool simple_wallet::set_variable(const std::vector<std::string> &args)
     CHECK_SIMPLE_VARIABLE("confirm-export-overwrite", set_confirm_export_overwrite, tr("0 or 1"));
     CHECK_SIMPLE_VARIABLE("refresh-from-block-height", set_refresh_from_block_height, tr("block height"));
     CHECK_SIMPLE_VARIABLE("auto-low-priority", set_auto_low_priority, tr("0 or 1"));
+    CHECK_SIMPLE_VARIABLE("subaddress-lookahead", set_subaddress_lookahead, tr("<major>:<minor>"));
   }
   fail_msg_writer() << tr("set: unrecognized argument(s)");
   return true;
