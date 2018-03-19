@@ -2574,25 +2574,6 @@ bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, 
     }
   }
 
-  // from v7, sorted ins
-  if (hf_version >= 7) {
-    const crypto::key_image *last_key_image = NULL;
-    for (size_t n = 0; n < tx.vin.size(); ++n)
-    {
-      const txin_v &txin = tx.vin[n];
-      if (txin.type() == typeid(txin_to_key))
-      {
-        const txin_to_key& in_to_key = boost::get<txin_to_key>(txin);
-        if (last_key_image && memcmp(&in_to_key.k_image, last_key_image, sizeof(*last_key_image)) >= 0)
-        {
-          MERROR_VER("transaction has unsorted inputs");
-          tvc.m_verifivation_failed = true;
-          return false;
-        }
-        last_key_image = &in_to_key.k_image;
-      }
-    }
-  }
   auto it = m_check_txin_table.find(tx_prefix_hash);
   if(it == m_check_txin_table.end())
   {
