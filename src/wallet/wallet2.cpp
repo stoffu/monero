@@ -524,10 +524,8 @@ size_t estimate_tx_size(bool use_rct, int n_inputs, int mixin, int n_outputs, si
 
 uint8_t get_bulletproof_fork(bool testnet)
 {
-  if (testnet)
-    return 7;
-  else
-    return 255; // TODO
+  // in Aeon, RingCT is activated with bulletproof
+  return HF_VERSION_ALLOW_RCT;
 }
 
 crypto::hash8 get_short_payment_id(const tools::wallet2::pending_tx &ptx)
