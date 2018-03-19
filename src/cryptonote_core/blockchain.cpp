@@ -2921,6 +2921,7 @@ bool Blockchain::check_fee(size_t blob_size, uint64_t fee) const
       return false;
     fee_per_kb = get_dynamic_per_kb_fee(base_reward, median, version);
   }
+#endif
   MDEBUG("Using " << print_money(fee) << "/kB fee");
 
   uint64_t needed_fee = blob_size / 1024;
@@ -2940,6 +2941,8 @@ uint64_t Blockchain::get_dynamic_per_kb_fee_estimate(uint64_t grace_blocks) cons
 {
   const uint8_t version = get_current_hard_fork_version();
 
+  return FEE_PER_KB;
+#if 0
   if (version < HF_VERSION_DYNAMIC_FEE)
     return FEE_PER_KB;
 
@@ -2967,6 +2970,7 @@ uint64_t Blockchain::get_dynamic_per_kb_fee_estimate(uint64_t grace_blocks) cons
   uint64_t fee = get_dynamic_per_kb_fee(base_reward, median, version);
   MDEBUG("Estimating " << grace_blocks << "-block fee at " << print_money(fee) << "/kB");
   return fee;
+#endif
 }
 
 //------------------------------------------------------------------
