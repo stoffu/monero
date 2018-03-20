@@ -101,6 +101,10 @@ static const struct {
 } testnet_hard_forks[] = {
   // version 1 from the start of the blockchain
   { 1, 1, 0, 1341378000 },
+
+  // versions 2, 3, 4, 5 and 6 are skipped, in favor of reducing the cost of adopting the POW change and other consensus updates from Monero
+  // version 7 starts from block 44000, which is on or around the 24th of March, 2018.
+  { 7, 44000, 0, 1521900000 },
 };
 
 //------------------------------------------------------------------
