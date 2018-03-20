@@ -982,6 +982,7 @@ namespace cryptonote
     total_size = 0;
     fee = 0;
     size_t n = 0;
+    size_t nofake_txs = 0;
     
     //baseline empty block
     get_block_reward(median_size, total_size, already_generated_coins, best_coinbase, version, height);
@@ -1050,14 +1051,82 @@ namespace cryptonote
         continue;
       }
 
+      bool is_nofake_tx = false;
       if (tx.vin.size() > 0)
       {
-        CHECKED_GET_SPECIFIC_VARIANT(tx.vin[0], const txin_to_key, itk, false);
-        // discourage < 3-way-mix transactions by mining them only as the first tx in an empty block
-        if (n > 0 && itk.key_offsets.size() < 3)
+        if (version >= 2)
         {
-          sorted_it++;
-          continue;
+          size_t n_unmixable = 0, n_mixable = 0;
+          size_t mixin = std::numeric_limits<size_t>::max();
+          const size_t min_mixin = 2;
+          for (const auto& txin : tx.vin)
+          {
+            if (txin.type() == typeid(txin_to_key))
+            {
+              const txin_to_key& in_to_key = boost::get<txin_to_key>(txin);
+              if (in_to_key.amount == 0)
+              {
+                // always consider rct inputs mixable. Even if there's not enough rct
+                // inputs on the chain to mix with, this is going to be the case for
+                // just a few blocks right after the fork at most
+                ++n_mixable;
+              }
+              else
+              {
+                uint64_t n_outputs = m_blockchain.get_db().get_num_outputs(in_to_key.amount);
+                LOG_PRINT_L2("output size " << print_money(in_to_key.amount) << ": " << n_outputs << " available");
+                // n_outputs includes the output we're considering
+                if (n_outputs <= min_mixin)
+                  ++n_unmixable;
+                else
+                  ++n_mixable;
+              }
+              if (in_to_key.key_offsets.size() - 1 < mixin)
+                mixin = in_to_key.key_offsets.size() - 1;
+            }
+          }
+
+          if (mixin < min_mixin)
+          {
+            if (n_unmixable == 0)
+            {
+              if (mixin == 1)
+              {
+                LOG_PRINT_L2("Tx " << get_transaction_hash(tx) << " has prohibited ring size 2, and no unmixable inputs");
+                sorted_it++;
+                continue;
+              }
+              LOG_PRINT_L2("Tx " << get_transaction_hash(tx) << " is non-private, and has no unmixable inputs. "
+                "So far in this block we've seen " << nofake_txs << " non-private txs out of " << n << " txs.");
+              if (nofake_txs * NOFAKE_TXS_TO_TOTAL_TXS_RATIO <= n)
+              {
+                LOG_PRINT_L2("This tx can be added because non-private txs are scarce enough");
+                is_nofake_tx = true;
+              }
+              else
+              {
+                LOG_PRINT_L2("This tx cannot be added because there's no more room for non-private txs");
+                sorted_it++;
+                continue;
+              }
+            }
+            if (n_mixable > 1)
+            {
+              LOG_PRINT_L2("Tx " << get_transaction_hash(tx) << " has too low ring size (" << (mixin + 1) << "), and more than one mixable input with unmixable inputs");
+              sorted_it++;
+              continue;
+            }
+          }
+        }
+        else
+        {
+          CHECKED_GET_SPECIFIC_VARIANT(tx.vin[0], const txin_to_key, itk, false);
+          // discourage < 3-way-mix transactions by mining them only as the first tx in an empty block
+          if (n > 0 && itk.key_offsets.size() < 3)
+          {
+            sorted_it++;
+            continue;
+          }
         }
       }
 
@@ -1098,6 +1167,10 @@ namespace cryptonote
       append_key_images(k_images, tx);
       sorted_it++;
       n++;
+      if (is_nofake_tx)
+      {
+        nofake_txs++;
+      }
       LOG_PRINT_L2("  added, new block size " << total_size << "/" << max_total_size << ", coinbase " << print_money(best_coinbase));
     }
 

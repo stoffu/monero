@@ -137,6 +137,7 @@
 
 #define HASH_OF_HASHES_STEP                     256
 
+#define NOFAKE_TXS_TO_TOTAL_TXS_RATIO           10
 
 // New constants are intended to go here
 namespace config

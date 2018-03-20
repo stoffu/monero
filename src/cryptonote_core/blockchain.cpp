@@ -2494,10 +2494,14 @@ bool Blockchain::expand_transaction_2(transaction &tx, const crypto::hash &tx_pr
 //        check_tx_input() rather than here, and use this function simply
 //        to iterate the inputs as necessary (splitting the task
 //        using threads, etc.)
-bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, uint64_t* pmax_used_block_height)
+bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, uint64_t* pmax_used_block_height, uint64_t* total_txs, uint64_t* nofake_txs)
 {
   PERF_TIMER(check_tx_inputs);
   LOG_PRINT_L3("Blockchain::" << __func__);
+
+  CHECK_AND_ASSERT_MES((total_txs && nofake_txs) || (!total_txs && !nofake_txs), false, "only one of total_txs and nofake_txs is non-null");
+  bool is_nofake_tx = false;
+
   size_t sig_index = 0;
   if(pmax_used_block_height)
     *pmax_used_block_height = 0;
@@ -2545,9 +2549,33 @@ bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, 
     {
       if (n_unmixable == 0)
       {
-        MERROR_VER("Tx " << get_transaction_hash(tx) << " has too low ring size (" << (mixin + 1) << "), and no unmixable inputs");
-        tvc.m_low_mixin = true;
-        return false;
+        if (mixin == 1)
+        {
+          MERROR_VER("Tx " << get_transaction_hash(tx) << " has prohibited ring size 2, and no unmixable inputs");
+          tvc.m_low_mixin = true;
+          return false;
+        }
+        MDEBUG("Tx " << get_transaction_hash(tx) << " is non-private, and has no unmixable inputs.");
+        if (nofake_txs)
+        {
+          MDEBUG("So far in this block we've seen " << (*nofake_txs) << " non-private txs out of " << (*total_txs) << " txs.");
+          if ((*nofake_txs) * NOFAKE_TXS_TO_TOTAL_TXS_RATIO <= (*total_txs))
+          {
+            MDEBUG("This tx can be added because non-private txs are scarce enough");
+            is_nofake_tx = true;
+          }
+          else
+          {
+            MERROR_VER("This tx cannot be added because there's no more room for non-private txs");
+            tvc.m_low_mixin = true;
+            return false;
+          }
+        }
+        else
+        {
+          // we came here from tx_memory_pool::is_transaction_ready_to_go(). since tx_memory_pool::fill_block_template() has already checked that 
+          // this non-private txs is scarce enough in the block, we can consider it as valid
+        }
       }
       if (n_mixable > 1)
       {
@@ -2831,6 +2859,16 @@ bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, 
       return false;
     }
   }
+
+  if (total_txs)
+  {
+    (*total_txs) += 1;
+    if (is_nofake_tx)
+    {
+      (*nofake_txs) += 1;
+    }
+  }
+
   return true;
 }
 
@@ -3309,6 +3347,7 @@ leave:
 // XXX old code adds miner tx here
 
   size_t tx_index = 0;
+  uint64_t total_txs = 0, nofake_txs = 0;
   // Iterate over the block's transaction hashes, grabbing each
   // from the tx_pool and validating them.  Each is then added
   // to txs.  Keys spent in each are added to <keys> by the double spend check.
@@ -3373,7 +3412,7 @@ leave:
     {
       // validate that transaction inputs and the keys spending them are correct.
       tx_verification_context tvc;
-      if(!check_tx_inputs(tx, tvc))
+      if(!check_tx_inputs(tx, tvc, NULL, &total_txs, &nofake_txs))
       {
         MERROR_VER("Block with id: " << id  << " has at least one transaction (id: " << tx_id << ") with wrong inputs.");
 
