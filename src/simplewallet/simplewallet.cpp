@@ -80,10 +80,6 @@ typedef cryptonote::simple_wallet sw;
 
 #define EXTENDED_LOGS_FILE "wallet_details.log"
 
-#define DEFAULT_MIX 4
-
-#define MIN_RING_SIZE 5 // Used to inform user about min ring size -- does not track actual protocol
-
 #define OUTPUT_EXPORT_FILE_MAGIC "Aeon output export\003"
 
 #define LOCK_IDLE_SCOPE() \
@@ -1223,27 +1219,27 @@ bool simple_wallet::set_default_ring_size(const std::vector<std::string> &args/*
   {
     if (strchr(args[1].c_str(), '-'))
     {
-      fail_msg_writer() << tr("ring size must be an integer >= ") << MIN_RING_SIZE;
+      fail_msg_writer() << tr("ring size must be an integer >= 0");
       return true;
     }
     uint32_t ring_size = boost::lexical_cast<uint32_t>(args[1]);
-    if (ring_size < MIN_RING_SIZE && ring_size != 0)
+    if (ring_size == 2)
     {
-      fail_msg_writer() << tr("ring size must be an integer >= ") << MIN_RING_SIZE;
+      fail_msg_writer() << tr("ring size must not be 2");
       return true;
     }
  
     const auto pwd_container = get_and_verify_password();
     if (pwd_container)
     {
-      m_wallet->default_mixin(ring_size > 0 ? ring_size - 1 : 0);
+      m_wallet->default_ring_size(ring_size);
       m_wallet->rewrite(m_wallet_file, pwd_container->password());
     }
     return true;
   }
   catch(const boost::bad_lexical_cast &)
   {
-    fail_msg_writer() << tr("ring size must be an integer >= ") << MIN_RING_SIZE;
+    fail_msg_writer() << tr("ring size must be an integer >= 0");
     return true;
   }
   catch(...)
@@ -1790,7 +1786,7 @@ bool simple_wallet::set_variable(const std::vector<std::string> &args)
     success_msg_writer() << "always-confirm-transfers = " << m_wallet->always_confirm_transfers();
     success_msg_writer() << "print-ring-members = " << m_wallet->print_ring_members();
     success_msg_writer() << "store-tx-info = " << m_wallet->store_tx_info();
-    success_msg_writer() << "default-ring-size = " << (m_wallet->default_mixin() ? m_wallet->default_mixin() + 1 : 0);
+    success_msg_writer() << "default-ring-size = " << m_wallet->default_ring_size();
     success_msg_writer() << "auto-refresh = " << m_wallet->auto_refresh();
     success_msg_writer() << "refresh-type = " << get_refresh_type_name(m_wallet->get_refresh_type());
     success_msg_writer() << "priority = " << m_wallet->get_default_priority();
@@ -1838,7 +1834,7 @@ bool simple_wallet::set_variable(const std::vector<std::string> &args)
     CHECK_SIMPLE_VARIABLE("always-confirm-transfers", set_always_confirm_transfers, tr("0 or 1"));
     CHECK_SIMPLE_VARIABLE("print-ring-members", set_print_ring_members, tr("0 or 1"));
     CHECK_SIMPLE_VARIABLE("store-tx-info", set_store_tx_info, tr("0 or 1"));
-    CHECK_SIMPLE_VARIABLE("default-ring-size", set_default_ring_size, tr("integer >= ") << MIN_RING_SIZE);
+    CHECK_SIMPLE_VARIABLE("default-ring-size", set_default_ring_size, tr("integer >= 0, must not be 2"));
     CHECK_SIMPLE_VARIABLE("auto-refresh", set_auto_refresh, tr("0 or 1"));
     CHECK_SIMPLE_VARIABLE("refresh-type", set_refresh_type, tr("full (slowest, no assumptions); optimize-coinbase (fast, assumes the whole coinbase is paid to a single address); no-coinbase (fastest, assumes we receive no coinbase transaction), default (same as optimize-coinbase)"));
     CHECK_SIMPLE_VARIABLE("priority", set_default_priority, tr("0, 1, 2, 3, or 4"));
@@ -3509,26 +3505,26 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
   if (local_args.size() > 0 && parse_priority(local_args[0], priority))
     local_args.erase(local_args.begin());
 
-  size_t fake_outs_count = 0;
+  size_t ring_size = 0;
   if(local_args.size() > 0) {
-    size_t ring_size;
     if(!epee::string_tools::get_xtype_from_string(ring_size, local_args[0]))
     {
-      fake_outs_count = m_wallet->default_mixin();
-      if (fake_outs_count == 0)
-        fake_outs_count = DEFAULT_MIX;
     }
-    else if (ring_size == 0)
+    else if (ring_size == 2)
     {
-      fail_msg_writer() << tr("Ring size must not be 0");
+      fail_msg_writer() << tr("Ring size must not be 2");
       return true;
     }
     else
     {
-      fake_outs_count = ring_size - 1;
       local_args.erase(local_args.begin());
     }
   }
+  if (ring_size == 0)
+    ring_size = m_wallet->default_ring_size();
+  if (ring_size == 0)
+    ring_size = DEFAULT_RING_SIZE;
+  size_t fake_outs_count = ring_size - 1;
   uint64_t adjusted_fake_outs_count = m_wallet->adjust_mixin(fake_outs_count);
   if (adjusted_fake_outs_count > fake_outs_count)
   {
@@ -3989,26 +3985,26 @@ bool simple_wallet::sweep_main(uint64_t below, const std::vector<std::string> &a
   if (local_args.size() > 0 && parse_priority(local_args[0], priority))
     local_args.erase(local_args.begin());
 
-  size_t fake_outs_count = 0;
+  size_t ring_size = 0;
   if(local_args.size() > 0) {
-    size_t ring_size;
     if(!epee::string_tools::get_xtype_from_string(ring_size, local_args[0]))
     {
-      fake_outs_count = m_wallet->default_mixin();
-      if (fake_outs_count == 0)
-        fake_outs_count = DEFAULT_MIX;
     }
-    else if (ring_size == 0)
+    else if (ring_size == 2)
     {
-      fail_msg_writer() << tr("Ring size must not be 0");
+      fail_msg_writer() << tr("Ring size must not be 2");
       return true;
     }
     else
     {
-      fake_outs_count = ring_size - 1;
       local_args.erase(local_args.begin());
     }
   }
+  if (ring_size == 0)
+    ring_size = m_wallet->default_ring_size();
+  if (ring_size == 0)
+    ring_size = DEFAULT_RING_SIZE;
+  size_t fake_outs_count = ring_size - 1;
   uint64_t adjusted_fake_outs_count = m_wallet->adjust_mixin(fake_outs_count);
   if (adjusted_fake_outs_count > fake_outs_count)
   {
@@ -4213,21 +4209,26 @@ bool simple_wallet::sweep_single(const std::vector<std::string> &args_)
     }
   }
 
-  size_t fake_outs_count = 0;
+  size_t ring_size = 0;
   if(local_args.size() > 0) {
-    size_t ring_size;
     if(!epee::string_tools::get_xtype_from_string(ring_size, local_args[0]))
     {
-      fake_outs_count = m_wallet->default_mixin();
-      if (fake_outs_count == 0)
-        fake_outs_count = DEFAULT_MIX;
+    }
+    else if (ring_size == 2)
+    {
+      fail_msg_writer() << tr("Ring size must not be 2");
+      return true;
     }
     else
     {
-      fake_outs_count = ring_size - 1;
       local_args.erase(local_args.begin());
     }
   }
+  if (ring_size == 0)
+    ring_size = m_wallet->default_ring_size();
+  if (ring_size == 0)
+    ring_size = DEFAULT_RING_SIZE;
+  size_t fake_outs_count = ring_size - 1;
 
   std::vector<uint8_t> extra;
   bool payment_id_seen = false;

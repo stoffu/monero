@@ -139,6 +139,8 @@
 
 #define NOFAKE_TXS_TO_TOTAL_TXS_RATIO           10
 
+#define DEFAULT_RING_SIZE                       3
+
 // New constants are intended to go here
 namespace config
 {

@@ -582,7 +582,7 @@ wallet2::wallet2(bool testnet, bool restricted):
   m_always_confirm_transfers(true),
   m_print_ring_members(false),
   m_store_tx_info(true),
-  m_default_mixin(0),
+  m_default_ring_size(0),
   m_default_priority(0),
   m_refresh_type(RefreshOptimizeCoinbase),
   m_auto_refresh(true),
@@ -2323,8 +2323,8 @@ bool wallet2::store_keys(const std::string& keys_file_name, const epee::wipeable
   value2.SetInt(m_store_tx_info ? 1 :0);
   json.AddMember("store_tx_info", value2, json.GetAllocator());
 
-  value2.SetUint(m_default_mixin);
-  json.AddMember("default_mixin", value2, json.GetAllocator());
+  value2.SetUint(m_default_ring_size);
+  json.AddMember("default_ring_size", value2, json.GetAllocator());
 
   value2.SetUint(m_default_priority);
   json.AddMember("default_priority", value2, json.GetAllocator());
@@ -2432,7 +2432,7 @@ bool wallet2::load_keys(const std::string& keys_file_name, const epee::wipeable_
     m_multisig_signers.clear();
     m_always_confirm_transfers = false;
     m_print_ring_members = false;
-    m_default_mixin = 0;
+    m_default_ring_size = 0;
     m_default_priority = 0;
     m_auto_refresh = true;
     m_refresh_type = RefreshType::RefreshDefault;
@@ -2498,8 +2498,8 @@ bool wallet2::load_keys(const std::string& keys_file_name, const epee::wipeable_
     GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, store_tx_keys, int, Int, false, true);
     GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, store_tx_info, int, Int, false, true);
     m_store_tx_info = ((field_store_tx_keys != 0) || (field_store_tx_info != 0));
-    GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, default_mixin, unsigned int, Uint, false, 0);
-    m_default_mixin = field_default_mixin;
+    GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, default_ring_size, unsigned int, Uint, false, 0);
+    m_default_ring_size = field_default_ring_size;
     GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, default_priority, unsigned int, Uint, false, 0);
     if (field_default_priority_found)
     {
@@ -4884,7 +4884,7 @@ int wallet2::get_fee_algorithm()
 //------------------------------------------------------------------------------------------------------------------------------
 uint64_t wallet2::adjust_mixin(uint64_t mixin)
 {
-  if (mixin < 2 && use_fork_rules(2, 10)) {
+  if (mixin == 1 && use_fork_rules(2, 10)) {
     MWARNING("Requested ring size " << (mixin + 1) << " too low for hard fork 2, using 3");
     mixin = 2;
   }
