@@ -549,9 +549,11 @@ bool BlockchainLMDB::need_resize(uint64_t threshold_size) const
 
   if ((double)size_used / mei.me_mapsize  > resize_percent)
   {
-    LOG_PRINT_L1("Threshold met (percent-based)");
+    LOG_PRINT_L1("Threshold met (percent-based): size_used/mei.me_mapsize=" << ((double)size_used / mei.me_mapsize) << ", resize_percent=" << resize_percent);
     return true;
   }
+  LOG_PRINT_L1("Threshold not met (percent-based): size_used/mei.me_mapsize=" << ((double)size_used / mei.me_mapsize) << ", resize_percent=" << resize_percent);
+
   return false;
 #else
   return false;
