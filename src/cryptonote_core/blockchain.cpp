@@ -151,6 +151,19 @@ bool Blockchain::have_tx_keyimg_as_spent(const crypto::key_image &key_im) const
 template <class visitor_t>
 bool Blockchain::scan_outputkeys_for_indexes(size_t tx_version, const txin_to_key& tx_in_to_key, visitor_t &vis, const crypto::hash &tx_prefix_hash, uint64_t* pmax_related_block_height) const
 {
+  auto join_offsets = [](const std::vector<uint64_t>& offsets) -> std::string {
+    std::stringstream ss;
+    for (auto i : offsets)
+      ss << i << " ";
+    return ss.str();
+  };
+  auto join_outputs = [](const std::vector<output_data_t>& outputs) -> std::string {
+    std::stringstream ss;
+    for (auto i : outputs)
+      ss << epee::string_tools::pod_to_hex(i.pubkey) << " ";
+    return ss.str();
+  };
+
   LOG_PRINT_L3("Blockchain::" << __func__);
 
   // ND: Disable locking and make method private.
@@ -186,13 +199,13 @@ bool Blockchain::scan_outputkeys_for_indexes(size_t tx_version, const txin_to_ke
       m_db->get_output_key(tx_in_to_key.amount, absolute_offsets, outputs, true);
       if (absolute_offsets.size() != outputs.size())
       {
-        MERROR_VER("Output does not exist! amount = " << tx_in_to_key.amount);
+        MERROR_VER("Output does not exist! amount = " << tx_in_to_key.amount << ", offsets = [" << join_offsets(absolute_offsets) << "], outputs = [" << join_outputs(outputs) << "], current height = " << get_current_blockchain_height() << ", top block hash = " << get_tail_id());
         return false;
       }
     }
     catch (...)
     {
-      MERROR_VER("Output does not exist! amount = " << tx_in_to_key.amount);
+      MERROR_VER("Output does not exist! amount = " << tx_in_to_key.amount << ", offsets = [" << join_offsets(absolute_offsets) << "], outputs = [" << join_outputs(outputs) << "], current height = " << get_current_blockchain_height() << ", top block hash = " << get_tail_id());
       return false;
     }
   }
@@ -211,13 +224,13 @@ bool Blockchain::scan_outputkeys_for_indexes(size_t tx_version, const txin_to_ke
         m_db->get_output_key(tx_in_to_key.amount, add_offsets, add_outputs, true);
         if (add_offsets.size() != add_outputs.size())
         {
-          MERROR_VER("Output does not exist! amount = " << tx_in_to_key.amount);
+          MERROR_VER("Output does not exist! amount = " << tx_in_to_key.amount << ", add_offsets = [" << join_offsets(add_offsets) << "], add_outputs = [" << join_outputs(add_outputs) << "], current height = " << get_current_blockchain_height() << ", top block hash = " << get_tail_id());
           return false;
         }
       }
       catch (...)
       {
-        MERROR_VER("Output does not exist! amount = " << tx_in_to_key.amount);
+        MERROR_VER("Output does not exist! amount = " << tx_in_to_key.amount << ", add_offsets = [" << join_offsets(add_offsets) << "], add_outputs = [" << join_outputs(add_outputs) << "], current height = " << get_current_blockchain_height() << ", top block hash = " << get_tail_id());
         return false;
       }
       outputs.insert(outputs.end(), add_outputs.begin(), add_outputs.end());
