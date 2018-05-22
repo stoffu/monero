@@ -6641,7 +6641,22 @@ bool simple_wallet::print_address(const std::vector<std::string> &args/* = std::
       [this, &index](const tools::wallet2::transfer_details& td) {
         return td.m_subaddr_index == cryptonote::subaddress_index{ m_current_subaddress_account, index };
       }) != transfers.end();
-    success_msg_writer() << index << "  " << m_wallet->get_subaddress_as_str({m_current_subaddress_account, index}) << "  " << (index == 0 ? tr("Primary address") : m_wallet->get_subaddress_label({m_current_subaddress_account, index})) << " " << (used ? tr("(used)") : "");
+    const crypto::secret_key a = m_wallet->get_account().get_keys().m_view_secret_key;
+    const crypto::secret_key b = m_wallet->get_account().get_keys().m_spend_secret_key;
+    crypto::secret_key m = m_wallet->get_account().get_device().get_subaddress_secret_key(a, {m_current_subaddress_account, index});
+    crypto::secret_key c = crypto::null_skey;
+    crypto::secret_key d = crypto::null_skey;
+    crypto::public_key C = crypto::null_pkey;
+    crypto::public_key D = crypto::null_pkey;
+    if (index > 0)
+    {
+      sc_add((unsigned char *)&unwrap(d), (unsigned const char *)&unwrap(b), (unsigned const char *)&unwrap(m));
+      sc_mul((unsigned char *)&unwrap(c), (unsigned const char *)&unwrap(a), (unsigned const char *)&unwrap(d));
+      C = rct::rct2pk(rct::scalarmultBase(rct::sk2rct(c)));
+      D = rct::rct2pk(rct::scalarmultBase(rct::sk2rct(d)));
+    }
+    success_msg_writer() << index << "  " << m_wallet->get_subaddress_as_str({m_current_subaddress_account, index}) << "  " << (index == 0 ? tr("Primary address") : m_wallet->get_subaddress_label({m_current_subaddress_account, index})) << " " << (used ? tr("(used)") : "")
+      << "addr=" << cryptonote::get_account_address_as_str(m_wallet->nettype(), false, {D, C}) << " view=" << c << ", spend=" << d;
   };
 
   uint32_t index = 0;
