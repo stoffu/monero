@@ -50,6 +50,20 @@ To run the same tests on a release build, replace `debug` with `release`.
 # Functional tests
 
 [TODO]
+Functional tests are located under the `tests/functional` directory. 
+Requires installing: https://github.com/emesik/monero-python
+
+First, run the daemon in the regtest mode:
+```
+monerod --regtest
+```
+
+Next, restore a mainnet wallet with the following seed and restore height 0 (the file path doesn't matter):
+```
+velvet lymph giddy number token physics poetry unquoted nibs useful sabotage limits benches lifestyle eden nitrogen anvil fewest avoid batch vials washing fences goat unquoted
+```
+
+Open the wallet file with `monero-wallet-rpc` with RPC port 18083. Finally, start tests by invoking ./blockchain.py or ./speed.py
 
 # Fuzz tests
 
