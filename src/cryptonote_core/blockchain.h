@@ -114,10 +114,11 @@ namespace cryptonote
      * @param nettype network type
      * @param offline true if running offline, else false
      * @param test_options test parameters
+     * @param regtest true if running regression test
      *
      * @return true on success, false if any initialization steps fail
      */
-    bool init(BlockchainDB* db, const network_type nettype = MAINNET, bool offline = false, const cryptonote::test_options *test_options = NULL);
+    bool init(BlockchainDB* db, const network_type nettype = MAINNET, bool offline = false, const cryptonote::test_options *test_options = NULL, bool regtest = false);
 
     /**
      * @brief Initialize the Blockchain state
@@ -1033,6 +1034,7 @@ namespace cryptonote
 
     network_type m_nettype;
     bool m_offline;
+    bool m_regtest;
 
     std::atomic<bool> m_cancel;
 
