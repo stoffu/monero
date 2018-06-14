@@ -420,10 +420,6 @@ bool Blockchain::init(BlockchainDB* db, const network_type nettype, bool offline
     // ensure we fixup anything we found and fix in the future
     m_db->fixup();
   }
-  else if (m_regtest)
-  {
-    m_db->set_batch_transactions(true);
-  }
 
   m_db->block_txn_start(true);
   // check how far behind we are
