@@ -56,6 +56,26 @@ using namespace epee;
 #define MAX_RESTRICTED_FAKE_OUTS_COUNT 40
 #define MAX_RESTRICTED_GLOBAL_FAKE_OUTS_COUNT 5000
 
+#define CHECK_POW_QUOTA(req) \
+  if (m_pow_quota) \
+  { \
+    auto duration = m_pow_quota_per_connection.find(req.pow_quota_connection_id); \
+    if (duration == m_pow_quota_per_connection.end() || duration->second == 0) \
+    { \
+      MDEBUG("User " << std::hex << req.pow_quota_connection_id << " has no remaining POW quota"); \
+      res.status = CORE_RPC_STATUS_NEEDS_POW_QUOTA; \
+      return true; \
+    } \
+    MDEBUG("The remaining POW quota for user " << std::hex << req.pow_quota_connection_id << " is " << std::dec << duration->second << "s"); \
+  } \
+  const uint64_t ts_start = time(NULL); \
+  auto pow_quota_updater = epee::misc_utils::create_scope_leave_handler([&]() { \
+    if (m_pow_quota) \
+    { \
+      m_pow_quota_per_connection[req.pow_quota_connection_id] -= std::min<uint64_t>(time(NULL) - ts_start, m_pow_quota_per_connection[req.pow_quota_connection_id]); \
+    } \
+  })
+
 namespace
 {
   void add_reason(std::string &reasons, const char *reason)
@@ -77,6 +97,8 @@ namespace cryptonote
     command_line::add_arg(desc, arg_restricted_rpc);
     command_line::add_arg(desc, arg_bootstrap_daemon_address);
     command_line::add_arg(desc, arg_bootstrap_daemon_login);
+    command_line::add_arg(desc, arg_pow_quota_hashrate);
+    command_line::add_arg(desc, arg_pow_quota_wallet_address);
     cryptonote::rpc_args::init_options(desc);
   }
   //------------------------------------------------------------------------------------------------------------------------------
@@ -126,6 +148,37 @@ namespace cryptonote
       m_should_use_bootstrap_daemon = false;
     }
     m_was_bootstrap_ever_used = false;
+
+    m_pow_quota = !command_line::is_arg_defaulted(vm, arg_pow_quota_wallet_address);
+    if (m_pow_quota)
+    {
+      cryptonote::address_parse_info info;
+      if(!get_account_address_from_str(info, m_nettype, command_line::get_arg(vm, arg_pow_quota_wallet_address)))
+      {
+        MERROR("Failed to parse POW quota wallet address");
+        return false;
+      }
+      if (info.is_subaddress)
+      {
+        MERROR("Please use primary address POW quota wallet");
+        return false;
+      }
+      m_pow_quota_wallet_address = info.address;
+      m_pow_quota_hashrate = command_line::get_arg(vm, arg_pow_quota_hashrate);
+    }
+    else
+    {
+      if (!command_line::is_arg_defaulted(vm, arg_pow_quota_wallet_address))
+      {
+        MERROR("Cannot specify --pow-quota-wallet-address without specifying --pow-quota");
+        return false;
+      }
+      if (!command_line::is_arg_defaulted(vm, arg_pow_quota_hashrate))
+      {
+        MERROR("Cannot specify --pow-quota-hashrate without specifying --pow-quota");
+        return false;
+      }
+    }
 
     boost::optional<epee::net_utils::http::login> http_login{};
 
@@ -226,6 +279,8 @@ namespace cryptonote
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_BLOCKS_FAST>(invoke_http_mode::BIN, "/getblocks.bin", req, res, r))
       return r;
 
+    CHECK_POW_QUOTA(req);
+
     std::list<std::pair<cryptonote::blobdata, std::list<cryptonote::blobdata> > > bs;
 
     if(!m_core.find_blockchain_supplement(req.start_height, req.block_ids, bs, res.current_height, res.start_height, req.prune, COMMAND_RPC_GET_BLOCKS_FAST_MAX_COUNT))
@@ -313,6 +368,8 @@ namespace cryptonote
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_BLOCKS_BY_HEIGHT>(invoke_http_mode::BIN, "/getblocks_by_height.bin", req, res, r))
       return r;
 
+    CHECK_POW_QUOTA(req);
+
     res.status = "Failed";
     res.blocks.clear();
     res.blocks.reserve(req.heights.size());
@@ -370,6 +427,8 @@ namespace cryptonote
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS>(invoke_http_mode::BIN, "/getrandom_outs.bin", req, res, r))
       return r;
 
+    CHECK_POW_QUOTA(req);
+
     res.status = "Failed";
 
     if (m_restricted)
@@ -413,6 +472,8 @@ namespace cryptonote
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_OUTPUTS_BIN>(invoke_http_mode::BIN, "/get_outs.bin", req, res, r))
       return r;
 
+    CHECK_POW_QUOTA(req);
+
     res.status = "Failed";
 
     if (m_restricted)
@@ -439,6 +500,8 @@ namespace cryptonote
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_OUTPUTS>(invoke_http_mode::JON, "/get_outs", req, res, r))
       return r;
+
+    CHECK_POW_QUOTA(req);
 
     res.status = "Failed";
 
@@ -482,6 +545,8 @@ namespace cryptonote
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_RANDOM_RCT_OUTPUTS>(invoke_http_mode::BIN, "/getrandom_rctouts.bin", req, res, r))
       return r;
 
+    CHECK_POW_QUOTA(req);
+
     res.status = "Failed";
     if(!m_core.get_random_rct_outs(req, res))
     {
@@ -510,6 +575,8 @@ namespace cryptonote
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_TX_GLOBAL_OUTPUTS_INDEXES>(invoke_http_mode::BIN, "/get_o_indexes.bin", req, res, ok))
       return ok;
 
+    CHECK_POW_QUOTA(req);
+
     bool r = m_core.get_tx_outputs_gindexs(req.txid, res.o_indexes);
     if(!r)
     {
@@ -527,6 +594,8 @@ namespace cryptonote
     bool ok;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_TRANSACTIONS>(invoke_http_mode::JON, "/gettransactions", req, res, ok))
       return ok;
+
+    CHECK_POW_QUOTA(req);
 
     std::vector<crypto::hash> vh;
     for(const auto& tx_hex_str: req.txs_hashes)
@@ -682,6 +751,8 @@ namespace cryptonote
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_IS_KEY_IMAGE_SPENT>(invoke_http_mode::JON, "/is_key_image_spent", req, res, ok))
       return ok;
 
+    CHECK_POW_QUOTA(req);
+
     std::vector<crypto::key_image> key_images;
     for(const auto& ki_hex_str: req.key_images)
     {
@@ -750,6 +821,8 @@ namespace cryptonote
       return ok;
 
     CHECK_CORE_READY();
+
+    CHECK_POW_QUOTA(req);
 
     std::string tx_blob;
     if(!string_tools::parse_hexstr_to_binbuff(req.tx_as_hex, tx_blob))
@@ -976,6 +1049,8 @@ namespace cryptonote
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_TRANSACTION_POOL>(invoke_http_mode::JON, "/get_transaction_pool", req, res, r))
       return r;
 
+    CHECK_POW_QUOTA(req);
+
     m_core.get_pool_transactions_and_spent_keys_info(res.transactions, res.spent_key_images, !request_has_rpc_origin || !m_restricted);
     res.status = CORE_RPC_STATUS_OK;
     return true;
@@ -988,6 +1063,8 @@ namespace cryptonote
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_TRANSACTION_POOL_HASHES>(invoke_http_mode::JON, "/get_transaction_pool_hashes.bin", req, res, r))
       return r;
 
+    CHECK_POW_QUOTA(req);
+
     m_core.get_pool_transaction_hashes(res.tx_hashes, !request_has_rpc_origin || !m_restricted);
     res.status = CORE_RPC_STATUS_OK;
     return true;
@@ -999,6 +1076,8 @@ namespace cryptonote
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_TRANSACTION_POOL_STATS>(invoke_http_mode::JON, "/get_transaction_pool_stats", req, res, r))
       return r;
+
+    CHECK_POW_QUOTA(req);
 
     m_core.get_pool_transaction_stats(res.pool_stats, !request_has_rpc_origin || !m_restricted);
     res.status = CORE_RPC_STATUS_OK;
@@ -1088,6 +1167,8 @@ namespace cryptonote
       error_resp.message = "Core is busy";
       return false;
     }
+
+    CHECK_POW_QUOTA(req);
 
     if(req.reserve_size > 255)
     {
@@ -1383,6 +1464,8 @@ namespace cryptonote
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_BLOCK_HEADERS_RANGE>(invoke_http_mode::JON_RPC, "getblockheadersrange", req, res, r))
       return r;
 
+    CHECK_POW_QUOTA(req);
+
     const uint64_t bc_height = m_core.get_current_blockchain_height();
     if (req.start_height >= bc_height || req.end_height >= bc_height || req.start_height > req.end_height)
     {
@@ -1464,6 +1547,8 @@ namespace cryptonote
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_BLOCK>(invoke_http_mode::JON_RPC, "getblock", req, res, r))
       return r;
+
+    CHECK_POW_QUOTA(req);
 
     crypto::hash block_hash;
     if (!req.hash.empty())
@@ -1711,6 +1796,8 @@ namespace cryptonote
     bool r;
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_OUTPUT_HISTOGRAM>(invoke_http_mode::JON_RPC, "get_output_histogram", req, res, r))
       return r;
+
+    CHECK_POW_QUOTA(req);
 
     std::map<uint64_t, std::tuple<uint64_t, uint64_t, uint64_t>> histogram;
     try
@@ -2056,6 +2143,8 @@ namespace cryptonote
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_TRANSACTION_POOL_BACKLOG>(invoke_http_mode::JON_RPC, "get_txpool_backlog", req, res, r))
       return r;
 
+    CHECK_POW_QUOTA(req);
+
     if (!m_core.get_txpool_backlog(res.backlog))
     {
       error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
@@ -2070,6 +2159,9 @@ namespace cryptonote
   bool core_rpc_server::on_get_output_distribution(const COMMAND_RPC_GET_OUTPUT_DISTRIBUTION::request& req, COMMAND_RPC_GET_OUTPUT_DISTRIBUTION::response& res, epee::json_rpc::error& error_resp)
   {
     PERF_TIMER(on_get_output_distribution);
+
+    CHECK_POW_QUOTA(req);
+
     try
     {
       for (uint64_t amount: req.amounts)
@@ -2164,6 +2256,106 @@ namespace cryptonote
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_request_pow_quota(const COMMAND_RPC_REQUEST_POW_QUOTA::request& req, COMMAND_RPC_REQUEST_POW_QUOTA::response& res, epee::json_rpc::error& error_resp)
+  {
+    PERF_TIMER(on_request_pow_quota);
+    bool r;
+    if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_REQUEST_POW_QUOTA>(invoke_http_mode::JON_RPC, "request_pow_quota", req, res, r))
+      return r;
+
+    if(!check_core_ready())
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_CORE_BUSY;
+      error_resp.message = "Core is busy";
+      return false;
+    }
+
+    COMMAND_RPC_GETBLOCKTEMPLATE::response gbt_res;
+    block b = AUTO_VAL_INIT(b);
+    if(!m_core.get_block_template(b, m_pow_quota_wallet_address, gbt_res.difficulty, gbt_res.height, gbt_res.expected_reward, {}))
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
+      error_resp.message = "Internal error: failed to create block template";
+      MERROR("Failed to create block template");
+      return false;
+    }
+    blobdata block_blob = t_serializable_object_to_blob(b);
+    crypto::public_key tx_pub_key = cryptonote::get_tx_pub_key_from_extra(b.miner_tx);
+    if(tx_pub_key == crypto::null_pkey)
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
+      error_resp.message = "Internal error: failed to create block template";
+      MERROR("Failed to find tx pub key in coinbase extra");
+      return false;
+    }
+    m_pow_quota_block_blob[req.pow_quota_connection_id] = block_blob;
+    res.height = gbt_res.height;
+    res.blocktemplate_blob = string_tools::buff_to_hex_nodelimer(block_blob);
+    res.reference_hashrate = m_pow_quota_hashrate;
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_submit_pow_quota(const COMMAND_RPC_SUBMIT_POW_QUOTA::request& req, COMMAND_RPC_SUBMIT_POW_QUOTA::response& res, epee::json_rpc::error& error_resp)
+  {
+    PERF_TIMER(on_submit_pow_quota);
+    bool r;
+    if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_SUBMIT_POW_QUOTA>(invoke_http_mode::JON_RPC, "submit_pow_quota", req, res, r))
+      return r;
+
+    if (!check_core_ready())
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_CORE_BUSY;
+      error_resp.message = "Core is busy";
+      return false;
+    }
+
+    auto block_blob = m_pow_quota_block_blob.find(req.pow_quota_connection_id);
+    if (block_blob == m_pow_quota_block_blob.end())
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
+      error_resp.message = "/request_pow_quota needs to be called first";
+      return false;
+    }
+
+    block b = AUTO_VAL_INIT(b);
+    if (!parse_and_validate_block_from_blob(block_blob->second, b))
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_WRONG_BLOCKBLOB;
+      error_resp.message = "Wrong block blob";
+      return false;
+    }
+
+    crypto::hash h;
+    b.nonce = req.nonce;
+    get_block_longhash(b, h, req.height);
+    if (!check_hash(h, req.duration * m_pow_quota_hashrate))
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
+      error_resp.message = "Insufficient POW";
+      return false;
+    }
+
+    const difficulty_type diff = m_core.get_blockchain_storage().get_difficulty_for_next_block();
+    if (check_hash(h, diff))
+    {
+      // block found!
+      if(!m_core.handle_block_found(b))
+      {
+        error_resp.code = CORE_RPC_ERROR_CODE_BLOCK_NOT_ACCEPTED;
+        error_resp.message = "Block not accepted";
+        return false;
+      }
+      MGINFO_GREEN("Found block for difficulty: " << diff);
+    }
+
+    m_pow_quota_per_connection[req.pow_quota_connection_id] += req.duration;
+    MDEBUG("Accepted POW quota from user " << std::hex << req.pow_quota_connection_id << ", current quota is " << std::dec << m_pow_quota_per_connection[req.pow_quota_connection_id]) << "s";
+
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
 
 
   const command_line::arg_descriptor<std::string, false, true, 2> core_rpc_server::arg_rpc_bind_port = {
@@ -2202,5 +2394,17 @@ namespace cryptonote
       "bootstrap-daemon-login"
     , "Specify username:password for the bootstrap daemon login"
     , ""
+    };
+
+  const command_line::arg_descriptor<std::string> core_rpc_server::arg_pow_quota_wallet_address = {
+      "pow-quota-wallet-address"
+    , "Wallet address for receiving POW quota from remote wallets"
+    , ""
+    };
+
+  const command_line::arg_descriptor<uint64_t> core_rpc_server::arg_pow_quota_hashrate = {
+      "pow-quota-hashrate"
+    , "Reference hashrate for measuring POW quota required for remote wallets"
+    , 30
     };
 }  // namespace cryptonote

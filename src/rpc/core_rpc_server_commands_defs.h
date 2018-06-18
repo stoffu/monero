@@ -40,6 +40,7 @@ namespace cryptonote
 #define CORE_RPC_STATUS_OK   "OK"
 #define CORE_RPC_STATUS_BUSY   "BUSY"
 #define CORE_RPC_STATUS_NOT_MINING "NOT MINING"
+#define CORE_RPC_STATUS_NEEDS_POW_QUOTA "NEEDS POW QUOTA"
 
 // When making *any* change here, bump minor
 // If the change is incompatible, then bump major and set minor to 0
@@ -49,7 +50,7 @@ namespace cryptonote
 // advance which version they will stop working with
 // Don't go over 32767 for any of these
 #define CORE_RPC_VERSION_MAJOR 1
-#define CORE_RPC_VERSION_MINOR 20
+#define CORE_RPC_VERSION_MINOR 21
 #define MAKE_CORE_RPC_VERSION(major,minor) (((major)<<16)|(minor))
 #define CORE_RPC_VERSION MAKE_CORE_RPC_VERSION(CORE_RPC_VERSION_MAJOR, CORE_RPC_VERSION_MINOR)
 
@@ -83,10 +84,12 @@ namespace cryptonote
       std::list<crypto::hash> block_ids; //*first 10 blocks id goes sequential, next goes in pow(2,n) offset, like 2, 4, 8, 16, 32, 64 and so on, and the last one is always genesis block */
       uint64_t    start_height;
       bool        prune;
+      uint64_t    pow_quota_connection_id;
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE_CONTAINER_POD_AS_BLOB(block_ids)
         KV_SERIALIZE(start_height)
         KV_SERIALIZE(prune)
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -133,8 +136,10 @@ namespace cryptonote
     struct request
     {
       std::vector<uint64_t> heights;
+      uint64_t pow_quota_connection_id;
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(heights)
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -564,11 +569,13 @@ namespace cryptonote
       std::list<std::string> txs_hashes;
       bool decode_as_json;
       bool prune;
+      uint64_t pow_quota_connection_id;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(txs_hashes)
         KV_SERIALIZE(decode_as_json)
         KV_SERIALIZE_OPT(prune, false)
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -632,9 +639,11 @@ namespace cryptonote
     struct request
     {
       std::vector<std::string> key_images;
+      uint64_t pow_quota_connection_id;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(key_images)
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -659,8 +668,10 @@ namespace cryptonote
     struct request
     {
       crypto::hash txid;
+      uint64_t pow_quota_connection_id;
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE_VAL_POD_AS_BLOB(txid)
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -684,9 +695,11 @@ namespace cryptonote
     {
       std::vector<uint64_t> amounts;
       uint64_t              outs_count;
+      uint64_t pow_quota_connection_id;
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(amounts)
         KV_SERIALIZE(outs_count)
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -738,9 +751,11 @@ namespace cryptonote
     struct request
     {
       std::vector<get_outputs_out> outputs;
+      uint64_t pow_quota_connection_id;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(outputs)
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -780,9 +795,11 @@ namespace cryptonote
     struct request
     {
       std::vector<get_outputs_out> outputs;
+      uint64_t pow_quota_connection_id;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(outputs)
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -822,8 +839,10 @@ namespace cryptonote
     struct request
     {
       uint64_t outs_count;
+      uint64_t pow_quota_connection_id;
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(outs_count)
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -856,6 +875,7 @@ namespace cryptonote
     {
       std::string tx_as_hex;
       bool do_not_relay;
+      uint64_t pow_quota_connection_id;
 
       request() {}
       explicit request(const transaction &);
@@ -863,6 +883,7 @@ namespace cryptonote
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(tx_as_hex)
         KV_SERIALIZE_OPT(do_not_relay, false)
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -1103,10 +1124,12 @@ namespace cryptonote
     {
       uint64_t reserve_size;       //max 255 bytes
       std::string wallet_address;
+      uint64_t pow_quota_connection_id;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(reserve_size)
         KV_SERIALIZE(wallet_address)
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -1274,11 +1297,13 @@ namespace cryptonote
       std::string hash;
       uint64_t height;
       bool fill_pow_hash;
+      uint64_t pow_quota_connection_id;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(hash)
         KV_SERIALIZE(height)
         KV_SERIALIZE_OPT(fill_pow_hash, false);
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -1467,7 +1492,9 @@ namespace cryptonote
   {
     struct request
     {
+      uint64_t pow_quota_connection_id;
       BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -1491,7 +1518,9 @@ namespace cryptonote
   {
     struct request
     {
+      uint64_t pow_quota_connection_id;
       BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -1520,7 +1549,9 @@ namespace cryptonote
   {
     struct request
     {
+      uint64_t pow_quota_connection_id;
       BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -1586,7 +1617,9 @@ namespace cryptonote
   {
     struct request
     {
+      uint64_t pow_quota_connection_id;
       BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -1632,11 +1665,13 @@ namespace cryptonote
       uint64_t start_height;
       uint64_t end_height;
       bool fill_pow_hash;
+      uint64_t pow_quota_connection_id;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(start_height)
         KV_SERIALIZE(end_height)
         KV_SERIALIZE_OPT(fill_pow_hash, false);
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -1955,6 +1990,7 @@ namespace cryptonote
       uint64_t max_count;
       bool unlocked;
       uint64_t recent_cutoff;
+      uint64_t pow_quota_connection_id;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(amounts);
@@ -1962,6 +1998,7 @@ namespace cryptonote
         KV_SERIALIZE(max_count);
         KV_SERIALIZE(unlocked);
         KV_SERIALIZE(recent_cutoff);
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -2227,12 +2264,14 @@ namespace cryptonote
       uint64_t from_height;
       uint64_t to_height;
       bool cumulative;
+      uint64_t pow_quota_connection_id;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(amounts)
         KV_SERIALIZE_OPT(from_height, (uint64_t)0)
         KV_SERIALIZE_OPT(to_height, (uint64_t)0)
         KV_SERIALIZE_OPT(cumulative, false)
+        KV_SERIALIZE_OPT(pow_quota_connection_id, (uint64_t)0)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -2263,4 +2302,61 @@ namespace cryptonote
     };
   };
 
+  struct COMMAND_RPC_REQUEST_POW_QUOTA
+  {
+    struct request
+    {
+      uint64_t pow_quota_connection_id;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(pow_quota_connection_id)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      uint64_t height;
+      blobdata blocktemplate_blob;
+      uint64_t reference_hashrate;
+      std::string status;
+      bool untrusted;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(height)
+        KV_SERIALIZE(blocktemplate_blob)
+        KV_SERIALIZE(reference_hashrate)
+        KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
+  struct COMMAND_RPC_SUBMIT_POW_QUOTA
+  {
+    struct request
+    {
+      uint64_t pow_quota_connection_id;
+      uint64_t duration;
+      uint32_t nonce;
+      uint64_t height;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(pow_quota_connection_id)
+        KV_SERIALIZE_OPT(duration, (uint64_t)60*30) // 30m by default
+        KV_SERIALIZE(nonce)
+        KV_SERIALIZE(height)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::string status;
+      bool untrusted;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(status)
+        KV_SERIALIZE(untrusted)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
 }

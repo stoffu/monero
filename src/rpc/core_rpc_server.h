@@ -58,6 +58,8 @@ namespace cryptonote
     static const command_line::arg_descriptor<bool> arg_restricted_rpc;
     static const command_line::arg_descriptor<std::string> arg_bootstrap_daemon_address;
     static const command_line::arg_descriptor<std::string> arg_bootstrap_daemon_login;
+    static const command_line::arg_descriptor<std::string> arg_pow_quota_wallet_address;
+    static const command_line::arg_descriptor<uint64_t> arg_pow_quota_hashrate;
 
     typedef epee::net_utils::connection_context_base connection_context;
 
@@ -154,6 +156,8 @@ namespace cryptonote
         MAP_JON_RPC_WE_IF("sync_info",           on_sync_info,                  COMMAND_RPC_SYNC_INFO, !m_restricted)
         MAP_JON_RPC_WE("get_txpool_backlog",     on_get_txpool_backlog,         COMMAND_RPC_GET_TRANSACTION_POOL_BACKLOG)
         MAP_JON_RPC_WE("get_output_distribution", on_get_output_distribution, COMMAND_RPC_GET_OUTPUT_DISTRIBUTION)
+        MAP_JON_RPC_WE("request_pow_quota",      on_request_pow_quota,          COMMAND_RPC_REQUEST_POW_QUOTA)
+        MAP_JON_RPC_WE("submit_pow_quota",       on_submit_pow_quota,           COMMAND_RPC_SUBMIT_POW_QUOTA)
       END_JSON_RPC_MAP()
     END_URI_MAP2()
 
@@ -216,6 +220,8 @@ namespace cryptonote
     bool on_sync_info(const COMMAND_RPC_SYNC_INFO::request& req, COMMAND_RPC_SYNC_INFO::response& res, epee::json_rpc::error& error_resp);
     bool on_get_txpool_backlog(const COMMAND_RPC_GET_TRANSACTION_POOL_BACKLOG::request& req, COMMAND_RPC_GET_TRANSACTION_POOL_BACKLOG::response& res, epee::json_rpc::error& error_resp);
     bool on_get_output_distribution(const COMMAND_RPC_GET_OUTPUT_DISTRIBUTION::request& req, COMMAND_RPC_GET_OUTPUT_DISTRIBUTION::response& res, epee::json_rpc::error& error_resp);
+    bool on_request_pow_quota(const COMMAND_RPC_REQUEST_POW_QUOTA::request& req, COMMAND_RPC_REQUEST_POW_QUOTA::response& res, epee::json_rpc::error& error_resp);
+    bool on_submit_pow_quota(const COMMAND_RPC_SUBMIT_POW_QUOTA::request& req, COMMAND_RPC_SUBMIT_POW_QUOTA::response& res, epee::json_rpc::error& error_resp);
     //-----------------------
 
 private:
@@ -239,6 +245,11 @@ private:
     bool m_was_bootstrap_ever_used;
     network_type m_nettype;
     bool m_restricted;
+    bool m_pow_quota;
+    cryptonote::account_public_address m_pow_quota_wallet_address;
+    uint64_t m_pow_quota_hashrate;
+    std::unordered_map<uint64_t, uint64_t> m_pow_quota_per_connection;
+    std::unordered_map<uint64_t, std::string> m_pow_quota_block_blob;
   };
 }
 

@@ -87,6 +87,7 @@ namespace tools
     //         is_key_image_spent_error
     //         get_histogram_error
     //         get_output_distribution
+    //         needs_pow_quota
     //       wallet_files_doesnt_correspond
     //
     // * - class with protected ctor
@@ -763,6 +764,14 @@ namespace tools
     {
       explicit get_output_distribution(std::string&& loc, const std::string& request)
         : wallet_rpc_error(std::move(loc), "failed to get output distribution", request)
+      {
+      }
+    };
+    //----------------------------------------------------------------------------------------------------
+    struct needs_pow_quota : public wallet_rpc_error
+    {
+      explicit needs_pow_quota(std::string&& loc, const std::string& request)
+        : wallet_rpc_error(std::move(loc), "daemon needs POW quota", request)
       {
       }
     };

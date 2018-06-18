@@ -411,6 +411,10 @@ namespace
     {
       fail_msg_writer() << tr("no connection to daemon. Please make sure daemon is running.");
     }
+    catch (const tools::error::needs_pow_quota&)
+    {
+      fail_msg_writer() << tr("You need to first submit POW quota to the daemon by using \"pow_quota\".");
+    }
     catch (const tools::error::wallet_rpc_error& e)
     {
       LOG_ERROR("RPC error: " << e.to_string());
@@ -1698,6 +1702,34 @@ bool simple_wallet::version(const std::vector<std::string> &args)
   return true;
 }
 
+bool simple_wallet::pow_quota(const std::vector<std::string>& args)
+{
+  if (args.size() > 1)
+  {
+    fail_msg_writer() << tr("usage: pow_quota [<duration_in_minutes>]");
+    return true;
+  }
+
+  uint64_t duration = 30;
+  if (args.size() == 1 && !string_tools::get_xtype_from_string(duration, args[0]))
+  {
+    fail_msg_writer() << tr("invalid duration: must be an unsigned integer");
+    return true;
+  }
+  duration *= 60;   // convert to seconds
+
+  try
+  {
+    m_wallet->generate_and_submit_pow_quota(duration);
+  }
+  catch(const std::exception &e)
+  {
+    fail_msg_writer() << e.what();
+  }
+
+  return true;
+}
+
 bool simple_wallet::set_always_confirm_transfers(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
 {
   const auto pwd_container = get_and_verify_password();
@@ -2453,6 +2485,10 @@ simple_wallet::simple_wallet()
                            boost::bind(&simple_wallet::version, this, _1),
                            tr("version"),
                            tr("Returns version information"));
+  m_cmd_binder.set_handler("pow_quota",
+                           boost::bind(&simple_wallet::pow_quota, this, _1),
+                           tr("pow_quota [<duration_in_minutes>]"),
+                           tr("Send required POW quota to remote daemon"));
   m_cmd_binder.set_handler("help",
                            boost::bind(&simple_wallet::help, this, _1),
                            tr("help [<command>]"),
@@ -4008,6 +4044,10 @@ bool simple_wallet::refresh_main(uint64_t start_height, bool reset, bool is_init
   {
     ss << tr("no connection to daemon. Please make sure daemon is running.");
   }
+  catch (const tools::error::needs_pow_quota&)
+  {
+    ss << tr("You need to first submit POW quota to the daemon by using \"pow_quota\".");
+  }
   catch (const tools::error::wallet_rpc_error& e)
   {
     LOG_ERROR("RPC error: " << e.to_string());
@@ -4308,6 +4348,10 @@ bool simple_wallet::rescan_spent(const std::vector<std::string> &args)
   catch (const tools::error::no_connection_to_daemon&)
   {
     fail_msg_writer() << tr("no connection to daemon. Please make sure daemon is running.");
+  }
+  catch (const tools::error::needs_pow_quota&)
+  {
+    fail_msg_writer() << tr("You need to first submit POW quota to the daemon by using \"pow_quota\".");
   }
   catch (const tools::error::is_key_image_spent_error&)
   {
