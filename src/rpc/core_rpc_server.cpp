@@ -1348,8 +1348,10 @@ namespace cryptonote
     cryptonote::block b;
     cryptonote::blobdata blob_reserve;
     blob_reserve.resize(req.reserve_size, 0);
-    if (!get_block_template(info.address, blob_reserve, res.reserved_offset, res.difficulty, res.height, res.expected_reward, b, error_resp))
+    size_t reserved_offset;
+    if (!get_block_template(info.address, blob_reserve, reserved_offset, res.difficulty, res.height, res.expected_reward, b, error_resp))
       return false;
+    res.reserved_offset = reserved_offset;
     blobdata block_blob = t_serializable_object_to_blob(b);
     blobdata hashing_blob = get_block_hashing_blob(b);
     res.prev_hash = string_tools::pod_to_hex(b.prev_id);
