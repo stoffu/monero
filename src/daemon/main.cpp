@@ -168,19 +168,6 @@ int main(int argc, char const * argv[])
       std::cerr << "Can't specify more than one of --tesnet and --stagenet and --regtest" << ENDL;
       return 1;
     }
-    if (!command_line::is_arg_defaulted(vm, cryptonote::arg_fixed_difficulty))
-    {
-      if (!regtest)
-      {
-        std::cerr << "Can't specify --fixed_difficulty without --regtest" << ENDL;
-        return 1;
-      }
-      if (command_line::get_arg(vm, cryptonote::arg_fixed_difficulty) == 0)
-      {
-        std::cerr << "Fixed difficulty must be greater than 0." << ENDL;
-        return 1;
-      }
-    }
 
     std::string db_type = command_line::get_arg(vm, cryptonote::arg_db_type);
 

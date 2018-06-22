@@ -83,8 +83,8 @@ namespace cryptonote
   };
   const command_line::arg_descriptor<difficulty_type> arg_fixed_difficulty  = {
     "fixed-difficulty"
-  , "Fixed difficulty used for regression testing. The --regtest flag must be set."
-  , 1
+  , "Fixed difficulty used for testing."
+  , 0
   };
   const command_line::arg_descriptor<std::string, false, true, 2> arg_data_dir = {
     "data-dir"
@@ -535,12 +535,8 @@ namespace cryptonote
     const cryptonote::test_options regtest_test_options = {
       regtest_hard_forks
     };
-    boost::optional<difficulty_type> regtest_diff;
-    if (regtest)
-    {
-      regtest_diff = command_line::get_arg(vm, arg_fixed_difficulty);
-    }
-    r = m_blockchain_storage.init(db.release(), m_nettype, m_offline, regtest ? &regtest_test_options : test_options, regtest_diff);
+    const difficulty_type fixed_difficulty = command_line::get_arg(vm, arg_fixed_difficulty);
+    r = m_blockchain_storage.init(db.release(), m_nettype, m_offline, regtest ? &regtest_test_options : test_options, fixed_difficulty);
 
     r = m_mempool.init(max_txpool_size);
     CHECK_AND_ASSERT_MES(r, false, "Failed to initialize memory pool");
