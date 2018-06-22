@@ -53,15 +53,11 @@ To run the same tests on a release build, replace `debug` with `release`.
 Functional tests are located under the `tests/functional` directory. 
 Requires installing: https://github.com/emesik/monero-python
 
-First, open a pair of terminals to run a pair of daemons connected to each other in the local network. On one of the terminals, run:
+First, run a regtest daemon in the offline mode and with a fixed difficulty:
 ```
-monerod --regtest --add-exclusive-node 127.0.0.1:18090
+monerod --regtest --offline --fixed-difficulty 1
 ```
-and on the other terminal, run:
-```
-monerod --regtest --add-exclusive-node 127.0.0.1:18080 --data-dir ~/temp/.bitmonero --p2p-bind-port 18090 --rpc-bind-port 18091 --zmq-rpc-bind-port 18092
-```
-You can optionally specify `--fixed-difficulty <N>` to test generating blocks with different fixed difficulties (make sure to specify the same value for both of the daemons).
+Alternatively, you can run multiple daemons and let them connect with each other by using `--add-exclusive-node`. In this case, make sure that the same fixed difficulty is given to all the daemons.
 
 Next, restore a mainnet wallet with the following seed and restore height 0 (the file path doesn't matter):
 ```

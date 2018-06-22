@@ -61,7 +61,7 @@ class SpeedTest():
             while wallet.get_balance()['unlocked_balance'] == 0:
                 print('Waiting for wallet to refresh...')
                 sleep(1)
-        self._test_speed_transfer_split(wallet=wallet)
+            self._test_speed_transfer_split(wallet=wallet)
         self._test_speed_generateblocks(daemon=daemon, blocks=10)
 
     def _test_speed_generateblocks(self, daemon, blocks):
