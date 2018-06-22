@@ -4389,6 +4389,39 @@ HardFork::State Blockchain::get_hard_fork_state() const
   return m_hardfork->get_state();
 }
 
+const std::vector<HardFork::Params>& Blockchain::get_hard_fork_heights(network_type nettype)
+{
+  static const std::vector<HardFork::Params> mainnet_heights = []()
+  {
+    std::vector<HardFork::Params> heights;
+    for (const auto& i : mainnet_hard_forks)
+      heights.emplace_back(i.version, i.height, i.threshold, i.time);
+    return heights;
+  }();
+  static const std::vector<HardFork::Params> testnet_heights = []()
+  {
+    std::vector<HardFork::Params> heights;
+    for (const auto& i : testnet_hard_forks)
+      heights.emplace_back(i.version, i.height, i.threshold, i.time);
+    return heights;
+  }();
+  static const std::vector<HardFork::Params> stagenet_heights = []()
+  {
+    std::vector<HardFork::Params> heights;
+    for (const auto& i : stagenet_hard_forks)
+      heights.emplace_back(i.version, i.height, i.threshold, i.time);
+    return heights;
+  }();
+  static const std::vector<HardFork::Params> dummy;
+  switch (nettype)
+  {
+    case MAINNET: return mainnet_heights;
+    case TESTNET: return testnet_heights;
+    case STAGENET: return stagenet_heights;
+    default: return dummy;
+  }
+}
+
 bool Blockchain::get_hard_fork_voting_info(uint8_t version, uint32_t &window, uint32_t &votes, uint32_t &threshold, uint64_t &earliest_height, uint8_t &voting) const
 {
   return m_hardfork->get_voting_info(version, window, votes, threshold, earliest_height, voting);
