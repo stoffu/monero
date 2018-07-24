@@ -47,6 +47,18 @@ class Daemon(object):
         }
         return self.rpc.send_request(getblocktemplate)
 
+    def get_block_headers_range(self, start_height, end_height):
+        get_block_headers_range = {
+            'method': 'get_block_headers_range',
+            'params': {
+                'start_height': start_height,
+                'end_height' : end_height
+            },
+            'jsonrpc': '2.0',
+            'id': '0'
+        }
+        return self.rpc.send_request(get_block_headers_range)
+
     def submitblock(self, block):
         submitblock = {
             'method': 'submitblock',
