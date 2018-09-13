@@ -1193,6 +1193,7 @@ namespace cryptonote
       uint64_t depth;
       std::string hash;
       difficulty_type difficulty;
+      difficulty_type cumulative_difficulty;
       uint64_t reward;
       uint64_t block_size;
       uint64_t num_txes;
@@ -1209,6 +1210,7 @@ namespace cryptonote
         KV_SERIALIZE(depth)
         KV_SERIALIZE(hash)
         KV_SERIALIZE(difficulty)
+        KV_SERIALIZE(cumulative_difficulty)
         KV_SERIALIZE(reward)
         KV_SERIALIZE(block_size)
         KV_SERIALIZE(num_txes)
