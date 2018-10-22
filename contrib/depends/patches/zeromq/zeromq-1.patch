@@ -1,6 +1,6 @@
-From 9114d3957725acd34aa8b8d011585812f3369411 Mon Sep 17 00:00:00 2001
-From: Jeroen Ooms <jeroenooms@gmail.com>
-Date: Tue, 20 Oct 2015 13:10:38 +0200
+From 8eda8f2f266c6568dc982515a0eff67f12e49248 Mon Sep 17 00:00:00 2001
+From: stoffu <stoffu@protonmail.ch>
+Date: Fri, 19 Oct 2018 18:21:26 +0900
 Subject: [PATCH] enable static libraries on mingw
 
 ---
@@ -8,15 +8,18 @@ Subject: [PATCH] enable static libraries on mingw
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/configure.ac b/configure.ac
-index 393505b..e92131a 100644
+index d702461e..abfd88b0 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -265,7 +265,7 @@ case "${host_os}" in
+@@ -261,7 +261,7 @@ case "${host_os}" in
          libzmq_dso_visibility="no"
-
+ 
          if test "x$enable_static" = "xyes"; then
 -            AC_MSG_ERROR([Building static libraries is not supported under MinGW32])
-+            CPPFLAGS="-DZMQ_STATIC"
++            CPPFLAGS="-DZMQ_STATIC $CPPFLAGS"
          fi
+         ;;
+     *cygwin*)
+-- 
+2.14.1
 
- 	# Set FD_SETSIZE to 1024
