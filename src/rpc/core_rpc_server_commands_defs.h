@@ -943,6 +943,8 @@ namespace cryptonote
       uint64_t height;
       uint64_t target_height;
       uint64_t difficulty;
+      std::string wide_difficulty;
+      uint64_t difficulty_top64;
       uint64_t target;
       uint64_t tx_count;
       uint64_t tx_pool_size;
@@ -958,6 +960,8 @@ namespace cryptonote
       std::string nettype;
       std::string top_block_hash;
       uint64_t cumulative_difficulty;
+      std::string wide_cumulative_difficulty;
+      uint64_t cumulative_difficulty_top64;
       uint64_t block_size_limit;
       uint64_t block_size_median;
       uint64_t start_time;
@@ -974,6 +978,8 @@ namespace cryptonote
         KV_SERIALIZE(height)
         KV_SERIALIZE(target_height)
         KV_SERIALIZE(difficulty)
+        KV_SERIALIZE(wide_difficulty)
+        KV_SERIALIZE(difficulty_top64)
         KV_SERIALIZE(target)
         KV_SERIALIZE(tx_count)
         KV_SERIALIZE(tx_pool_size)
@@ -989,6 +995,8 @@ namespace cryptonote
         KV_SERIALIZE(nettype)
         KV_SERIALIZE(top_block_hash)
         KV_SERIALIZE(cumulative_difficulty)
+        KV_SERIALIZE(wide_cumulative_difficulty)
+        KV_SERIALIZE(cumulative_difficulty_top64)
         KV_SERIALIZE(block_size_limit)
         KV_SERIALIZE(block_size_median)
         KV_SERIALIZE(start_time)
@@ -1119,6 +1127,8 @@ namespace cryptonote
     struct response
     {
       uint64_t difficulty;
+      std::string wide_difficulty;
+      uint64_t difficulty_top64;
       uint64_t height;
       uint64_t reserved_offset;
       uint64_t expected_reward;
@@ -1130,6 +1140,8 @@ namespace cryptonote
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(difficulty)
+        KV_SERIALIZE(wide_difficulty)
+        KV_SERIALIZE(difficulty_top64)
         KV_SERIALIZE(height)
         KV_SERIALIZE(reserved_offset)
         KV_SERIALIZE(expected_reward)
@@ -1192,8 +1204,12 @@ namespace cryptonote
       uint64_t height;
       uint64_t depth;
       std::string hash;
-      difficulty_type difficulty;
-      difficulty_type cumulative_difficulty;
+      uint64_t difficulty;
+      std::string wide_difficulty;
+      uint64_t difficulty_top64;
+      uint64_t cumulative_difficulty;
+      std::string wide_cumulative_difficulty;
+      uint64_t cumulative_difficulty_top64;
       uint64_t reward;
       uint64_t block_size;
       uint64_t num_txes;
@@ -1210,7 +1226,11 @@ namespace cryptonote
         KV_SERIALIZE(depth)
         KV_SERIALIZE(hash)
         KV_SERIALIZE(difficulty)
+        KV_SERIALIZE(wide_difficulty)
+        KV_SERIALIZE(difficulty_top64)
         KV_SERIALIZE(cumulative_difficulty)
+        KV_SERIALIZE(wide_cumulative_difficulty)
+        KV_SERIALIZE(cumulative_difficulty_top64)
         KV_SERIALIZE(reward)
         KV_SERIALIZE(block_size)
         KV_SERIALIZE(num_txes)
@@ -2143,6 +2163,8 @@ namespace cryptonote
       uint64_t height;
       uint64_t length;
       uint64_t difficulty;
+      std::string wide_difficulty;
+      uint64_t difficulty_top64;
       std::vector<std::string> block_hashes;
       std::string main_chain_parent_block;
 
@@ -2151,6 +2173,8 @@ namespace cryptonote
         KV_SERIALIZE(height)
         KV_SERIALIZE(length)
         KV_SERIALIZE(difficulty)
+        KV_SERIALIZE(wide_difficulty)
+        KV_SERIALIZE(difficulty_top64)
         KV_SERIALIZE(block_hashes)
         KV_SERIALIZE(main_chain_parent_block)
       END_KV_SERIALIZE_MAP()
