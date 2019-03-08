@@ -1429,7 +1429,7 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
     }
 
     int num_vouts_received = 0;
-    tx_pub_key = pub_key_field.pub_key;
+    tx_pub_key = m_account.get_keys().m_account_address.m_view_public_key;
     tools::threadpool& tpool = tools::threadpool::getInstance();
     tools::threadpool::waiter waiter;
     const cryptonote::account_keys& keys = m_account.get_keys();
