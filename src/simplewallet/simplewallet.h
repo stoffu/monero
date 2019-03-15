@@ -220,6 +220,7 @@ namespace cryptonote
     bool print_ring(const std::vector<std::string>& args);
     bool set_ring(const std::vector<std::string>& args);
     bool save_known_rings(const std::vector<std::string>& args);
+    bool ledger_rescue(const std::vector<std::string>& args);
     bool blackball(const std::vector<std::string>& args);
     bool unblackball(const std::vector<std::string>& args);
     bool blackballed(const std::vector<std::string>& args);
@@ -332,6 +333,9 @@ namespace cryptonote
     std::string m_subaddress_lookahead;
 
     epee::wipeable_string m_electrum_seed;  // electrum-style seed parameter
+
+    std::string m_ledger_rescue_txids;
+    std::string m_ledger_rescue_keys;
 
     crypto::secret_key m_recovery_key;  // recovery key (used as random for wallet gen)
     bool m_restore_deterministic_wallet;  // recover flag

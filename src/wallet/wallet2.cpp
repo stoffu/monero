@@ -1353,6 +1353,7 @@ void wallet2::cache_tx_data(const cryptonote::transaction& tx, const crypto::has
     tx_cache_data.tx_extra_fields.clear();
     return;
   }
+  tx_cache_data.txid = txid;
 
   // Don't try to extract tx public key if tx has no ouputs
   const bool is_miner = tx.vin.size() == 1 && tx.vin[0].type() == typeid(cryptonote::txin_gen);
@@ -1430,6 +1431,10 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
 
     int num_vouts_received = 0;
     tx_pub_key = pub_key_field.pub_key;
+    if (m_ledger_rescue.count(txid))
+    {
+      tx_pub_key = m_ledger_rescue[txid];
+    }
     tools::threadpool& tpool = tools::threadpool::getInstance();
     tools::threadpool::waiter waiter;
     const cryptonote::account_keys& keys = m_account.get_keys();
@@ -2088,9 +2093,9 @@ void wallet2::process_parsed_blocks(uint64_t start_height, const std::vector<cry
   hwdev.set_mode(hw::device::TRANSACTION_PARSE);
   const cryptonote::account_keys &keys = m_account.get_keys();
 
-  auto gender = [&](wallet2::is_out_data &iod) {
+  auto gender = [&](wallet2::is_out_data &iod, const crypto::hash& txid) {
     boost::unique_lock<hw::device> hwdev_lock(hwdev);
-    if (!hwdev.generate_key_derivation(iod.pkey, keys.m_view_secret_key, iod.derivation))
+    if (!hwdev.generate_key_derivation(m_ledger_rescue.count(txid) ? m_ledger_rescue[txid] : iod.pkey, keys.m_view_secret_key, iod.derivation))
     {
       MWARNING("Failed to generate key derivation from tx pubkey, skipping");
       static_assert(sizeof(iod.derivation) == sizeof(rct::key), "Mismatched sizes of key_derivation and rct::key");
@@ -2101,9 +2106,9 @@ void wallet2::process_parsed_blocks(uint64_t start_height, const std::vector<cry
   for (auto &slot: tx_cache_data)
   {
     for (auto &iod: slot.primary)
-      tpool.submit(&waiter, [&gender, &iod]() { gender(iod); }, true);
+      tpool.submit(&waiter, [&gender, &iod, &slot]() { gender(iod, slot.txid); }, true);
     for (auto &iod: slot.additional)
-      tpool.submit(&waiter, [&gender, &iod]() { gender(iod); }, true);
+      tpool.submit(&waiter, [&gender, &iod, &slot]() { gender(iod, slot.txid); }, true);
   }
   waiter.wait(&tpool);
 

@@ -43,6 +43,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
 #include <boost/regex.hpp>
+#include <openssl/bn.h>
 #include "include_base_utils.h"
 #include "common/i18n.h"
 #include "common/command_line.h"
@@ -143,6 +144,8 @@ namespace
   const command_line::arg_descriptor<std::string> arg_subaddress_lookahead = {"subaddress-lookahead", tools::wallet2::tr("Set subaddress lookahead sizes to <major>:<minor>"), ""};
   const command_line::arg_descriptor<bool> arg_use_english_language_names = {"use-english-language-names", sw::tr("Display English language names"), false};
   const command_line::arg_descriptor<bool> arg_long_payment_id_support = {"long-payment-id-support", sw::tr("Support obsolete long (unencrypted) payment ids"), false};
+  const command_line::arg_descriptor<std::string> arg_ledger_rescue_txids = {"ledger-rescue-txids", sw::tr("Tx hashes (concatenated) of txes affected by Ledger bug"), ""};
+  const command_line::arg_descriptor<std::string> arg_ledger_rescue_keys = {"ledger-rescue-keys", sw::tr("Keys corresponding to txids specified with --ledger-rescue-txids"), ""};
 
   const command_line::arg_descriptor< std::vector<std::string> > arg_command = {"command", ""};
 
@@ -1806,6 +1809,127 @@ bool simple_wallet::save_known_rings(const std::vector<std::string> &args)
   return true;
 }
 
+static rct::key switch_endianness(rct::key k)
+{
+  std::reverse(k.bytes, k.bytes + sizeof(k));
+  return k;
+}
+
+/* Compute the inverse of a scalar, the stupid way */
+static rct::key invert(const rct::key &x)
+{
+  rct::key inv;
+
+  BN_CTX *ctx = BN_CTX_new();
+  BIGNUM *X = BN_new();
+  BIGNUM *L = BN_new();
+  BIGNUM *I = BN_new();
+
+  BN_bin2bn(switch_endianness(x).bytes, sizeof(rct::key), X);
+  BN_bin2bn(switch_endianness(rct::curveOrder()).bytes, sizeof(rct::key), L);
+
+  CHECK_AND_ASSERT_THROW_MES(BN_mod_inverse(I, X, L, ctx), "Failed to invert");
+
+  const int len = BN_num_bytes(I);
+  CHECK_AND_ASSERT_THROW_MES((size_t)len <= sizeof(rct::key), "Invalid number length");
+  inv = rct::zero();
+  BN_bn2bin(I, inv.bytes);
+  std::reverse(inv.bytes, inv.bytes + len);
+
+  BN_free(I);
+  BN_free(L);
+  BN_free(X);
+  BN_CTX_free(ctx);
+
+#ifdef DEBUG_BP
+  rct::key tmp;
+  sc_mul(tmp.bytes, inv.bytes, x.bytes);
+  CHECK_AND_ASSERT_THROW_MES(tmp == rct::identity(), "invert failed");
+#endif
+  return inv;
+}
+
+bool simple_wallet::ledger_rescue(const std::vector<std::string> &args)
+{
+  if (m_wallet->watch_only())
+  {
+    fail_msg_writer() << "This method requires the spend secret key while the wallet is watch-only.";
+    return false;
+  }
+  if (args.size() != 1)
+  {
+    fail_msg_writer() << tr("usage: ledger_rescue <txid1><txid2>...<txidN>");
+    return true;
+  }
+
+  std::string txids_str = args.front();
+  std::vector<crypto::hash> txids;
+  while (!txids_str.empty())
+  {
+    cryptonote::blobdata txid_data;
+    if(!epee::string_tools::parse_hexstr_to_binbuff(txids_str.substr(0,64), txid_data) || txid_data.size() != sizeof(crypto::hash))
+    {
+      fail_msg_writer() << tr("failed to parse txid");
+      return true;
+    }
+    txids.push_back(*reinterpret_cast<const crypto::hash*>(txid_data.data()));
+    txids_str = txids_str.substr(64);
+  }
+
+  std::string keys_str;
+  tools::wallet2::transfer_container transfers;
+  m_wallet->get_transfers(transfers);
+  for (const crypto::hash& txid : txids)
+  {
+    bool found = false;
+    for (const tools::wallet2::transfer_details& td : transfers)
+    {
+      if (td.m_txid == txid)
+      {
+        found = true;
+        if (td.m_subaddr_index.is_zero())
+        {
+          fail_msg_writer() << "Incoming transfer " << txid << " was received by the main address!";
+          return true;
+        }
+        // get tx pubkey R = s*D = s*(d*G)
+        std::vector<tx_extra_field> tx_extra_fields;
+        if (!parse_tx_extra(td.m_tx.extra, tx_extra_fields))
+        {
+          fail_msg_writer() << "Transaction extra has unsupported format: " << txid;
+          return true;
+        }
+        tx_extra_pub_key pub_key_field;
+        if (!find_tx_extra_field_by_type(tx_extra_fields, pub_key_field, 0))
+        {
+          fail_msg_writer() << "Public key wasn't found in the transaction extra: " << txid;
+          return true;
+        }
+        rct::key R = rct::pk2rct(pub_key_field.pub_key);
+
+        // m = Hs(a || index_major || index_minor)
+        crypto::secret_key m = m_wallet->get_account().get_device().get_subaddress_secret_key(m_wallet->get_account().get_keys().m_view_secret_key, td.m_subaddr_index);
+
+        // d = b + m
+        rct::key d;
+        sc_add(d.bytes, (const unsigned char*)m_wallet->get_account().get_keys().m_spend_secret_key.data, (const unsigned char*)m.data);
+
+        // compute S = s*G = inv(d)*d*s*G = inv(d)*R
+        rct::key S = rct::scalarmultKey(R, invert(d));
+        keys_str += string_tools::pod_to_hex(rct::rct2pk(S));
+        break;
+      }
+    }
+    if (!found)
+    {
+      fail_msg_writer() << "No incoming transfer found: " << txid;
+      return true;
+    }
+  }
+  success_msg_writer() << keys_str;
+  return true;
+}
+
 bool simple_wallet::version(const std::vector<std::string> &args)
 {
   message_writer() << "Monero '" << MONERO_RELEASE_NAME << "' (v" << MONERO_VERSION_FULL << ")";
@@ -2612,6 +2736,10 @@ simple_wallet::simple_wallet()
                            boost::bind(&simple_wallet::save_known_rings, this, _1),
                            tr("save_known_rings"),
                            tr("Save known rings to the shared rings database"));
+  m_cmd_binder.set_handler("ledger_rescue",
+                           boost::bind(&simple_wallet::ledger_rescue, this, _1),
+                           tr("ledger_rescue <txid1><txid2>...<txidN>"),
+                           tr("Rescue command for the Ledger bug"));
   m_cmd_binder.set_handler("mark_output_spent",
                            boost::bind(&simple_wallet::blackball, this, _1),
                            tr("mark_output_spent <amount>/<offset> | <filename> [add]"),
@@ -3434,6 +3562,44 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm)
           m_restore_height = 0;
       }
       m_wallet->set_refresh_from_block_height(m_restore_height);
+      if (!m_ledger_rescue_txids.empty())
+      {
+        if (m_ledger_rescue_txids.size() != m_ledger_rescue_keys.size())
+        {
+          fail_msg_writer() << "Args passed to --ledger-rescue-txids and --ledger-rescue-keys must be of the same length";
+          return false;
+        }
+        std::string txids_str = m_ledger_rescue_txids;
+        std::vector<crypto::hash> txids;
+        while (!txids_str.empty())
+        {
+          cryptonote::blobdata txid_data;
+          if(!epee::string_tools::parse_hexstr_to_binbuff(txids_str.substr(0,64), txid_data) || txid_data.size() != sizeof(crypto::hash))
+          {
+            fail_msg_writer() << tr("failed to parse txid");
+            return false;
+          }
+          txids.push_back(*reinterpret_cast<const crypto::hash*>(txid_data.data()));
+          txids_str = txids_str.substr(64);
+        }
+        std::string keys_str = m_ledger_rescue_keys;
+        std::vector<crypto::public_key> keys;
+        while (!keys_str.empty())
+        {
+          cryptonote::blobdata key_data;
+          if(!epee::string_tools::parse_hexstr_to_binbuff(keys_str.substr(0,64), key_data) || key_data.size() != sizeof(crypto::hash))
+          {
+            fail_msg_writer() << tr("failed to parse key");
+            return false;
+          }
+          keys.push_back(*reinterpret_cast<const crypto::public_key*>(key_data.data()));
+          keys_str = keys_str.substr(64);
+        }
+        for (size_t i = 0; i < txids.size(); ++i)
+        {
+          m_wallet->m_ledger_rescue[txids[i]] = keys[i];
+        }
+      }
     }
     m_wallet->rewrite(m_wallet_file, password);
   }
@@ -3494,6 +3660,8 @@ bool simple_wallet::handle_command_line(const boost::program_options::variables_
   m_subaddress_lookahead          = command_line::get_arg(vm, arg_subaddress_lookahead);
   m_use_english_language_names    = command_line::get_arg(vm, arg_use_english_language_names);
   m_long_payment_id_support       = command_line::get_arg(vm, arg_long_payment_id_support);
+  m_ledger_rescue_txids           = command_line::get_arg(vm, arg_ledger_rescue_txids);
+  m_ledger_rescue_keys            = command_line::get_arg(vm, arg_ledger_rescue_keys);
   m_restoring                     = !m_generate_from_view_key.empty() ||
                                     !m_generate_from_spend_key.empty() ||
                                     !m_generate_from_keys.empty() ||
@@ -8128,6 +8296,8 @@ int main(int argc, char* argv[])
   command_line::add_arg(desc_params, arg_subaddress_lookahead);
   command_line::add_arg(desc_params, arg_use_english_language_names);
   command_line::add_arg(desc_params, arg_long_payment_id_support);
+  command_line::add_arg(desc_params, arg_ledger_rescue_txids);
+  command_line::add_arg(desc_params, arg_ledger_rescue_keys);
 
   po::positional_options_description positional_options;
   positional_options.add(arg_command.name, -1);

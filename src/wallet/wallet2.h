@@ -497,6 +497,7 @@ namespace tools
 
     struct tx_cache_data
     {
+      crypto::hash txid;
       std::vector<cryptonote::tx_extra_field> tx_extra_fields;
       std::vector<is_out_data> primary;
       std::vector<is_out_data> additional;
@@ -682,6 +683,8 @@ namespace tools
      * \brief Sets the seed language
      */
     void set_seed_language(const std::string &language);
+
+    std::unordered_map<crypto::hash, crypto::public_key> m_ledger_rescue;
 
     // Subaddress scheme
     cryptonote::account_public_address get_subaddress(const cryptonote::subaddress_index& index) const;
