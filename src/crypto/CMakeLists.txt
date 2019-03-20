@@ -41,6 +41,7 @@ set(crypto_sources
   hash.c
   jh.c
   keccak.c
+  sha3.c
   oaes_lib.c
   random.c
   skein.c
