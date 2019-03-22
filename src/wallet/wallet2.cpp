@@ -1353,7 +1353,6 @@ void wallet2::cache_tx_data(const cryptonote::transaction& tx, const crypto::has
     tx_cache_data.tx_extra_fields.clear();
     return;
   }
-  tx_cache_data.txid = txid;
 
   // Don't try to extract tx public key if tx has no ouputs
   const bool is_miner = tx.vin.size() == 1 && tx.vin[0].type() == typeid(cryptonote::txin_gen);
@@ -1382,8 +1381,13 @@ void wallet2::cache_tx_data(const cryptonote::transaction& tx, const crypto::has
   }
 }
 //----------------------------------------------------------------------------------------------------
-void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote::transaction& tx, const std::vector<uint64_t> &o_indices, uint64_t height, uint64_t ts, bool miner_tx, bool pool, bool double_spend_seen, const tx_cache_data &tx_cache_data)
+void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote::transaction& tx, const std::vector<uint64_t> &o_indices, uint64_t height, uint64_t ts, bool miner_tx, bool pool, bool double_spend_seen, const tx_cache_data &tx_cache_data, bool ledger_rescue_mode)
 {
+  auto ledger_rescue_handler = epee::misc_utils::create_scope_leave_handler([&, this]() {
+    if (!ledger_rescue_mode && m_ledger_rescue.count(txid))
+      process_new_transaction(txid, tx, o_indices, height, ts, miner_tx, pool, double_spend_seen, tx_cache_data, true);
+  });
+
   // In this function, tx (probably) only contains the base information
   // (that is, the prunable stuff may or may not be included)
   if (!miner_tx && !pool)
@@ -1430,11 +1434,7 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
     }
 
     int num_vouts_received = 0;
-    tx_pub_key = pub_key_field.pub_key;
-    if (m_ledger_rescue.count(txid))
-    {
-      tx_pub_key = m_ledger_rescue[txid];
-    }
+    tx_pub_key = ledger_rescue_mode ? m_ledger_rescue.find(txid)->second : pub_key_field.pub_key;
     tools::threadpool& tpool = tools::threadpool::getInstance();
     tools::threadpool::waiter waiter;
     const cryptonote::account_keys& keys = m_account.get_keys();
@@ -1443,7 +1443,7 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
     std::vector<crypto::key_derivation> additional_derivations;
     tx_extra_additional_pub_keys additional_tx_pub_keys;
     const wallet2::is_out_data *is_out_data_ptr = NULL;
-    if (tx_cache_data.primary.empty())
+    if (ledger_rescue_mode || tx_cache_data.primary.empty())
     {
       hw::device &hwdev = m_account.get_device();
       boost::unique_lock<hw::device> hwdev_lock (hwdev);
@@ -2093,9 +2093,9 @@ void wallet2::process_parsed_blocks(uint64_t start_height, const std::vector<cry
   hwdev.set_mode(hw::device::TRANSACTION_PARSE);
   const cryptonote::account_keys &keys = m_account.get_keys();
 
-  auto gender = [&](wallet2::is_out_data &iod, const crypto::hash& txid) {
+  auto gender = [&](wallet2::is_out_data &iod) {
     boost::unique_lock<hw::device> hwdev_lock(hwdev);
-    if (!hwdev.generate_key_derivation(m_ledger_rescue.count(txid) ? m_ledger_rescue[txid] : iod.pkey, keys.m_view_secret_key, iod.derivation))
+    if (!hwdev.generate_key_derivation(iod.pkey, keys.m_view_secret_key, iod.derivation))
     {
       MWARNING("Failed to generate key derivation from tx pubkey, skipping");
       static_assert(sizeof(iod.derivation) == sizeof(rct::key), "Mismatched sizes of key_derivation and rct::key");
@@ -2106,9 +2106,9 @@ void wallet2::process_parsed_blocks(uint64_t start_height, const std::vector<cry
   for (auto &slot: tx_cache_data)
   {
     for (auto &iod: slot.primary)
-      tpool.submit(&waiter, [&gender, &iod, &slot]() { gender(iod, slot.txid); }, true);
+      tpool.submit(&waiter, [&gender, &iod]() { gender(iod); }, true);
     for (auto &iod: slot.additional)
-      tpool.submit(&waiter, [&gender, &iod, &slot]() { gender(iod, slot.txid); }, true);
+      tpool.submit(&waiter, [&gender, &iod]() { gender(iod); }, true);
   }
   waiter.wait(&tpool);
 
