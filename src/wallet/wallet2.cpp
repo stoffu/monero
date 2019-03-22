@@ -1717,6 +1717,7 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
   // check all outputs for spending (compare key images)
   for(auto& in: tx.vin)
   {
+    if (ledger_rescue_mode) break;
     if(in.type() != typeid(cryptonote::txin_to_key))
       continue;
     auto it = m_key_images.find(boost::get<cryptonote::txin_to_key>(in).k_image);
@@ -7520,7 +7521,7 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
     real_oe.second.dest = rct::pk2rct(td.get_public_key());
     real_oe.second.mask = rct::commit(td.amount(), td.m_mask);
     *it_to_replace = real_oe;
-    src.real_out_tx_key = get_tx_pub_key_from_extra(td.m_tx, td.m_pk_index);
+    src.real_out_tx_key = m_ledger_rescue.count(td.m_txid) ? m_ledger_rescue[td.m_txid] : get_tx_pub_key_from_extra(td.m_tx, td.m_pk_index);
     src.real_out_additional_tx_keys = get_additional_tx_pub_keys_from_extra(td.m_tx);
     src.real_output = it_to_replace - src.outputs.begin();
     src.real_output_in_tx_index = td.m_internal_output_index;
