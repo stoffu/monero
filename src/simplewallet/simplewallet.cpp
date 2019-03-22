@@ -1856,6 +1856,28 @@ bool simple_wallet::ledger_rescue(const std::vector<std::string> &args)
     fail_msg_writer() << "This method requires the spend secret key while the wallet is watch-only.";
     return false;
   }
+  if (m_wallet->key_on_device())
+  {
+    fail_msg_writer() << tr("command not supported by HW wallet");
+    return true;
+  }
+  SCOPED_WALLET_UNLOCK();
+  // sanity check that the wallet secret keys are correct
+  {
+    crypto::public_key A, B;
+    secret_key_to_public_key(m_wallet->get_account().get_keys().m_view_secret_key, A);
+    secret_key_to_public_key(m_wallet->get_account().get_keys().m_spend_secret_key, B);
+    if (A != m_wallet->get_account().get_keys().m_account_address.m_view_public_key)
+    {
+      fail_msg_writer() << "view secret key is incorrect!";
+      return true;
+    }
+    if (B != m_wallet->get_account().get_keys().m_account_address.m_spend_public_key)
+    {
+      fail_msg_writer() << "spend secret key is incorrect!";
+      return true;
+    }
+  }
   if (args.size() != 1)
   {
     fail_msg_writer() << tr("usage: ledger_rescue <txid1><txid2>...<txidN>");
