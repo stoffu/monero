@@ -462,6 +462,7 @@ bool Blockchain::init(BlockchainDB* db, const network_type nettype, bool offline
     m_timestamps_and_difficulties_height = 0;
     m_hardfork->reorganize_from_chain_height(get_current_blockchain_height());
     m_tx_pool.on_blockchain_dec(m_db->height()-1, get_tail_id());
+    MGINFO("blockchain dec: new top hash: " << get_tail_id());
   }
 
   if (test_options && test_options->long_term_block_size_window)
@@ -619,6 +620,7 @@ block Blockchain::pop_block_from_blockchain()
 
   CHECK_AND_ASSERT_THROW_MES(update_next_cumulative_size_limit(), "Error updating next cumulative size limit");
   m_tx_pool.on_blockchain_dec(m_db->height()-1, get_tail_id());
+  MGINFO("blockchain dec: new top hash: " << get_tail_id());
   invalidate_block_template_cache();
 
   return popped_block;
@@ -786,12 +788,17 @@ bool Blockchain::get_block_by_hash(const crypto::hash &h, block &blk, bool *orph
 // less blocks than desired if there aren't enough.
 difficulty_type Blockchain::get_difficulty_for_next_block()
 {
+ int done = 0;
+  MGINFO("get_difficulty_for_next_block: height " << m_db->height());
   if (m_fixed_difficulty)
   {
+    MGINFO("  -> fixed: " << (m_db->height() ? m_fixed_difficulty : 1));
     return m_db->height() ? m_fixed_difficulty : 1;
   }
 
+start:
   LOG_PRINT_L3("Blockchain::" << __func__);
+  difficulty_type D = 0;
 
   crypto::hash top_hash = get_tail_id();
   {
@@ -800,20 +807,28 @@ difficulty_type Blockchain::get_difficulty_for_next_block()
     // something a bit out of date, but that's fine since anything which
     // requires the blockchain lock will have acquired it in the first place,
     // and it will be unlocked only when called from the getinfo RPC
+    MGINFO("Locked, tail id " << top_hash << ", cached is " << m_difficulty_for_next_block_top_hash);
     if (top_hash == m_difficulty_for_next_block_top_hash)
-      return m_difficulty_for_next_block;
+    {
+      MGINFO("Same, using cached diff " << m_difficulty_for_next_block);
+      D = m_difficulty_for_next_block;
+    }
   }
 
   CRITICAL_REGION_LOCAL(m_blockchain_lock);
   std::vector<uint64_t> timestamps;
   std::vector<difficulty_type> difficulties;
   auto height = m_db->height();
-  top_hash = get_tail_id(); // get it again now that we have the lock
+  auto new_top_hash = get_tail_id(); // get it again now that we have the lock
+  if (!(new_top_hash == top_hash)) D=0;
+  MGINFO("Re-locked, height " << height << ", tail id " << new_top_hash << (new_top_hash == top_hash ? "" : " (different)"));
+  top_hash = new_top_hash;
   // ND: Speedup
   // 1. Keep a list of the last 735 (or less) blocks that is used to compute difficulty,
   //    then when the next block difficulty is queried, push the latest height data and
   //    pop the oldest one from the list. This only requires 1x read per height instead
   //    of doing 735 (DIFFICULTY_BLOCKS_COUNT).
+  bool check = false;
   if (m_timestamps_and_difficulties_height != 0 && ((height - m_timestamps_and_difficulties_height) == 1) && m_timestamps.size() >= DIFFICULTY_BLOCKS_COUNT)
   {
     uint64_t index = height - 1;
@@ -828,8 +843,12 @@ difficulty_type Blockchain::get_difficulty_for_next_block()
     m_timestamps_and_difficulties_height = height;
     timestamps = m_timestamps;
     difficulties = m_difficulties;
+    check = true;
   }
-  else
+  //else
+std::vector<uint64_t> timestamps_from_cache = timestamps;
+std::vector<difficulty_type> difficulties_from_cache = difficulties;
+
   {
     uint64_t offset = height - std::min <uint64_t> (height, static_cast<uint64_t>(DIFFICULTY_BLOCKS_COUNT));
     if (offset == 0)
@@ -842,16 +861,39 @@ difficulty_type Blockchain::get_difficulty_for_next_block()
       timestamps.reserve(height - offset);
       difficulties.reserve(height - offset);
     }
+    MGINFO("Looking up " << (height - offset) << " from " << offset);
     for (; offset < height; offset++)
     {
       timestamps.push_back(m_db->get_block_timestamp(offset));
       difficulties.push_back(m_db->get_block_cumulative_difficulty(offset));
     }
 
+if (check) if (timestamps != timestamps_from_cache || difficulties !=difficulties_from_cache)
+{
+  MGINFO("Inconsistency XXX:");
+  MGINFO("top hash: "<<top_hash);
+  MGINFO("timestamps: " << timestamps_from_cache.size() << " from cache, but " << timestamps.size() << " without");
+  MGINFO("difficulties: " << difficulties_from_cache.size() << " from cache, but " << difficulties.size() << " without");
+  MGINFO("timestamps_from_cache:"); for (const auto &v :timestamps_from_cache) MGINFO("  " << v);
+  MGINFO("timestamps:"); for (const auto &v :timestamps) MGINFO("  " << v);
+  MGINFO("difficulties_from_cache:"); for (const auto &v :difficulties_from_cache) MGINFO("  " << v);
+  MGINFO("difficulties:"); for (const auto &v :difficulties) MGINFO("  " << v);
+
+  uint64_t dbh = m_db->height();
+  uint64_t sh = dbh < 10000 ? 0 : dbh - 10000;
+  MGINFO("History from -10k at :" << dbh << ", from " << sh);
+  for (uint64_t h = sh; h < dbh; ++h)
+  {
+   uint64_t ts = m_db->get_block_timestamp(h);
+   cryptonote::difficulty_type d = m_db->get_block_cumulative_difficulty(h);
+   MGINFO("  " << h << " " << ts << " " << d.str());
+  }
+}
     m_timestamps_and_difficulties_height = height;
     m_timestamps = timestamps;
     m_difficulties = difficulties;
   }
+
   size_t target = get_difficulty_target();
   uint64_t last_diff_reset_height = m_hardfork->get_last_diff_reset_height(height);
   difficulty_type last_diff_reset_value = m_hardfork->get_last_diff_reset_value(height);
@@ -860,6 +902,16 @@ difficulty_type Blockchain::get_difficulty_for_next_block()
   CRITICAL_REGION_LOCAL1(m_difficulty_lock);
   m_difficulty_for_next_block_top_hash = top_hash;
   m_difficulty_for_next_block = diff;
+if (D && D != diff) MGINFO("XXX Mimatch at " << height << "/" << top_hash << "/" << get_tail_id() << ": cached " << D << ", real " << diff);
+
+++done;
+if (done == 1 && D && D != diff)
+{
+ MGINFO("Might be a race. Let's see what happens if we try again...");
+ epee::misc_utils::sleep_no_w(100);
+ goto start;
+}
+MGINFO("Diff for " << top_hash << ": " << diff);
   return diff;
 }
 //------------------------------------------------------------------
@@ -3766,6 +3818,7 @@ leave:
 
   // appears to be a NOP *and* is called elsewhere.  wat?
   m_tx_pool.on_blockchain_inc(new_height, id);
+  MGINFO("blockchain inc: new top hash: " << id);
   get_difficulty_for_next_block(); // just to cache it
   invalidate_block_template_cache();
 
