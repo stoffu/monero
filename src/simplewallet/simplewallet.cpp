@@ -4938,8 +4938,6 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
             subaddr_indices.insert(i);
           for (uint32_t i : subaddr_indices)
             prompt << boost::format(tr("Spending from address index %d\n")) % i;
-          if (subaddr_indices.size() > 1)
-            prompt << tr("WARNING: Outputs of multiple addresses are being used together, which might potentially compromise your privacy.\n");
         }
         prompt << boost::format(tr("Sending %s.  ")) % print_money(total_sent);
         if (ptx_vector.size() > 1)
@@ -5366,8 +5364,6 @@ bool simple_wallet::sweep_main(uint64_t below, bool locked, const std::vector<st
         subaddr_indices.insert(i);
       for (uint32_t i : subaddr_indices)
         prompt << boost::format(tr("Spending from address index %d\n")) % i;
-      if (subaddr_indices.size() > 1)
-        prompt << tr("WARNING: Outputs of multiple addresses are being used together, which might potentially compromise your privacy.\n");
     }
     if (m_wallet->print_ring_members() && !print_ring_members(ptx_vector, prompt))
       return true;
