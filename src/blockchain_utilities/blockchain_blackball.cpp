@@ -50,6 +50,13 @@ namespace po = boost::program_options;
 using namespace epee;
 using namespace cryptonote;
 
+#define BLACKBALL(n, amount, index, txid, ki, reason) \
+  MINFO("Blackballing output: amount=" << amount << ", index=" << index << ", txid=" << txid << ", ki=" << ki << ", " << reason); \
+  const crypto::public_key pkey = core_storage[n]->get_output_key(amount, index); \
+  MINFO("Blackballed pkey: " << pkey); \
+  ringdb.blackball(pkey); \
+  state.newly_spent.insert({output_data(amount, index), false})
+
 struct output_data
 {
   uint64_t amount;
@@ -63,7 +70,11 @@ struct output_data
     a & index;
   }
 };
-BOOST_CLASS_VERSION(output_data, 0)
+
+typedef struct txindex {
+  crypto::hash key;
+  cryptonote::tx_data_t data;
+} txindex;
 
 namespace std
 {
@@ -86,15 +97,25 @@ namespace std
       return reinterpret_cast<const std::size_t &>(h);
     }
   };
+  template<> struct hash<std::pair<crypto::hash, crypto::key_image>>
+  {
+    size_t operator()(const std::pair<crypto::hash, crypto::key_image> &v) const
+    {
+      crypto::hash h;
+      crypto::cn_fast_hash(&v, sizeof(v), h);
+      return reinterpret_cast<const std::size_t &>(h);
+    }
+  };
 }
 
 struct blackball_state_t
 {
   std::unordered_map<crypto::key_image, std::vector<uint64_t>> relative_rings;
-  std::unordered_map<output_data, std::unordered_set<crypto::key_image>> outputs;
+  std::unordered_map<output_data, std::unordered_set<std::pair<crypto::hash, crypto::key_image>>> outputs;
   std::unordered_map<std::string, uint64_t> processed_heights;
   std::unordered_set<output_data> spent;
   std::unordered_map<std::vector<uint64_t>, size_t> ring_instances;
+  std::unordered_map<output_data, bool> newly_spent;
 
   template <typename t_archive> void serialize(t_archive &a, const unsigned int ver)
   {
@@ -102,12 +123,10 @@ struct blackball_state_t
     a & outputs;
     a & processed_heights;
     a & spent;
-    if (ver < 1)
-      return;
     a & ring_instances;
+    a & newly_spent;
   }
 };
-BOOST_CLASS_VERSION(blackball_state_t, 1)
 
 static std::string get_default_db_path()
 {
@@ -118,12 +137,12 @@ static std::string get_default_db_path()
   return dir.string();
 }
 
-static bool for_all_transactions(const std::string &filename, uint64_t &start_idx, const std::function<bool(const cryptonote::transaction_prefix&)> &f)
+static bool for_all_transactions(const std::string &filename, uint64_t &start_idx, const std::function<bool(const cryptonote::transaction_prefix&, const crypto::hash, uint64_t)> &f)
 {
   MDB_env *env;
-  MDB_dbi dbi;
+  MDB_dbi dbi_pruned, dbi_indices;
   MDB_txn *txn;
-  MDB_cursor *cur;
+  MDB_cursor *cur_pruned, *cur_indices;
   int dbr;
   bool tx_active = false;
 
@@ -141,11 +160,14 @@ static bool for_all_transactions(const std::string &filename, uint64_t &start_id
   epee::misc_utils::auto_scope_leave_caller txn_dtor = epee::misc_utils::create_scope_leave_handler([&](){if (tx_active) mdb_txn_abort(txn);});
   tx_active = true;
 
-  dbr = mdb_dbi_open(txn, "txs_pruned", MDB_INTEGERKEY, &dbi);
-  if (dbr)
-    dbr = mdb_dbi_open(txn, "txs", MDB_INTEGERKEY, &dbi);
+  dbr = mdb_dbi_open(txn, "txs_pruned", MDB_INTEGERKEY, &dbi_pruned);
   if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
-  dbr = mdb_cursor_open(txn, dbi, &cur);
+  dbr = mdb_cursor_open(txn, dbi_pruned, &cur_pruned);
+  if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
+
+  dbr = mdb_dbi_open(txn, "tx_indices", MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, &dbi_indices);
+  if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
+  dbr = mdb_cursor_open(txn, dbi_indices, &cur_indices);
   if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
 
   MDB_val k;
@@ -157,7 +179,7 @@ static bool for_all_transactions(const std::string &filename, uint64_t &start_id
   MDB_cursor_op op = MDB_SET;
   while (1)
   {
-    int ret = mdb_cursor_get(cur, &k, &v, op);
+    int ret = mdb_cursor_get(cur_pruned, &k, &v, op);
     op = MDB_NEXT;
     if (ret == MDB_NOTFOUND)
       break;
@@ -179,17 +201,28 @@ static bool for_all_transactions(const std::string &filename, uint64_t &start_id
     bool r = do_serialize(ba, tx);
     CHECK_AND_ASSERT_MES(r, false, "Failed to parse transaction from blob");
 
-    start_idx = *(uint64_t*)k.mv_data;
-    if (!f(tx)) {
+    ret = mdb_cursor_get(cur_indices, &k, &v, op == MDB_SET ? MDB_FIRST : MDB_NEXT);
+    if (ret)
+      throw std::runtime_error("Failed to query tx_indices: " + std::string(mdb_strerror(ret)));
+    if (v.mv_size != sizeof(txindex))
+      throw std::runtime_error("Bad value size");
+
+    const crypto::hash txid = ((txindex*)v.mv_data)->key;
+    const uint64_t height = ((txindex*)v.mv_data)->data.block_id;
+
+    start_idx = idx;
+    if (!f(tx, txid, height)) {
       fret = false;
       break;
     }
   }
 
-  mdb_cursor_close(cur);
+  mdb_cursor_close(cur_pruned);
+  mdb_cursor_close(cur_indices);
   mdb_txn_commit(txn);
   tx_active = false;
-  mdb_dbi_close(env, dbi);
+  mdb_dbi_close(env, dbi_pruned);
+  mdb_dbi_close(env, dbi_indices);
   mdb_env_close(env);
   return fret;
 }
@@ -379,7 +412,6 @@ int main(int argc, char* argv[])
 
   size_t done = 0;
   blackball_state_t state;
-  std::unordered_set<output_data> newly_spent;
   const std::string state_file_path = (boost::filesystem::path(output_file_path) / "blackball-state.bin").string();
 
   LOG_PRINT_L0("Loading state data from " << state_file_path);
@@ -417,7 +449,7 @@ int main(int argc, char* argv[])
     if (it != state.processed_heights.end())
       start_idx = it->second;
     LOG_PRINT_L0("Reading blockchain from " << inputs[n] << " from " << start_idx);
-    for_all_transactions(inputs[n], start_idx, [&](const cryptonote::transaction_prefix &tx)->bool
+    for_all_transactions(inputs[n], start_idx, [&](const cryptonote::transaction_prefix &tx, const crypto::hash &txid, uint64_t height)->bool
     {
       for (const auto &in: tx.vin)
       {
@@ -430,26 +462,20 @@ int main(int argc, char* argv[])
         const std::vector<uint64_t> absolute = cryptonote::relative_output_offsets_to_absolute(txin.key_offsets);
         if (n == 0)
           for (uint64_t out: absolute)
-            state.outputs[output_data(txin.amount, out)].insert(txin.k_image);
+            state.outputs[output_data(txin.amount, out)].insert({txid, txin.k_image});
 
         std::vector<uint64_t> new_ring = canonicalize(txin.key_offsets);
         const uint32_t ring_size = txin.key_offsets.size();
         state.ring_instances[new_ring] += 1;
         if (ring_size == 1)
         {
-          const crypto::public_key pkey = core_storage[n]->get_output_key(txin.amount, absolute[0]);
-          MINFO("Blackballing output " << pkey << ", due to being used in a 1-ring");
-          ringdb.blackball(pkey);
-          newly_spent.insert(output_data(txin.amount, absolute[0]));
+          BLACKBALL(n, txin.amount, absolute[0], txid, txin.k_image, "due to being used in a 1-ring");
         }
         else if (state.ring_instances[new_ring] == new_ring.size())
         {
           for (size_t o = 0; o < new_ring.size(); ++o)
           {
-            const crypto::public_key pkey = core_storage[n]->get_output_key(txin.amount, absolute[o]);
-            MINFO("Blackballing output " << pkey << ", due to being used in " << new_ring.size() << " identical " << new_ring.size() << "-rings");
-            ringdb.blackball(pkey);
-            newly_spent.insert(output_data(txin.amount, absolute[o]));
+            BLACKBALL(n, txin.amount, absolute[o], txid, txin.k_image, "due to being used in " << new_ring.size() << " identical " << new_ring.size() << "-rings");
           }
         }
         else if (state.relative_rings.find(txin.k_image) != state.relative_rings.end())
@@ -474,10 +500,7 @@ int main(int argc, char* argv[])
             }
             else if (common.size() == 1)
             {
-              const crypto::public_key pkey = core_storage[n]->get_output_key(txin.amount, common[0]);
-              MINFO("Blackballing output " << pkey << ", due to being used in rings with a single common element");
-              ringdb.blackball(pkey);
-              newly_spent.insert(output_data(txin.amount, common[0]));
+              BLACKBALL(n, txin.amount, common[0], txid, txin.k_image, "due to being used in rings with a single common element");
             }
             else
             {
@@ -504,20 +527,23 @@ int main(int argc, char* argv[])
       break;
   }
 
-  while (!newly_spent.empty())
+  stop_requested = false;
+  std::unordered_map<output_data, bool> work_spent;
+  while (!state.newly_spent.empty())
   {
-    LOG_PRINT_L0("Secondary pass due to " << newly_spent.size() << " newly found spent outputs");
-    std::unordered_set<output_data> work_spent = std::move(newly_spent);
-    newly_spent.clear();
+    LOG_PRINT_L0("Secondary pass due to " << state.newly_spent.size() << " newly found spent outputs");
+    work_spent = std::move(state.newly_spent);
+    state.newly_spent.clear();
 
     for (const auto &e: work_spent)
-      state.spent.insert(e);
+      state.spent.insert(e.first);
 
-    for (const output_data &od: work_spent)
+    for (std::pair<const output_data, bool>& p : work_spent)
     {
-      for (const crypto::key_image &ki: state.outputs[od])
+      const output_data &od = p.first;
+      for (const std::pair<crypto::hash, crypto::key_image> &p: state.outputs[od])
       {
-        std::vector<uint64_t> absolute = cryptonote::relative_output_offsets_to_absolute(state.relative_rings[ki]);
+        std::vector<uint64_t> absolute = cryptonote::relative_output_offsets_to_absolute(state.relative_rings[p.second]);
         size_t known = 0;
         uint64_t last_unknown = 0;
         for (uint64_t out: absolute)
@@ -530,13 +556,23 @@ int main(int argc, char* argv[])
         }
         if (known == absolute.size() - 1)
         {
-          const crypto::public_key pkey = core_storage[0]->get_output_key(od.amount, last_unknown);
-          MINFO("Blackballing output " << pkey << ", due to being used in a " <<
-              absolute.size() << "-ring where all other outputs are known to be spent");
-          ringdb.blackball(pkey);
-          newly_spent.insert(output_data(od.amount, last_unknown));
+          BLACKBALL(0, od.amount, last_unknown, p.first, p.second, "due to being used in a " << absolute.size() << "-ring where all other outputs are known to be spent");
         }
       }
+      p.second = true;    // mark as processed
+      if (stop_requested)
+      {
+        MINFO("Stopping secondary passes...");
+        break;
+      }
+    }
+    if (stop_requested)
+    {
+      // put unprocessed work_spent back to newly_spent
+      for (const auto& p : work_spent)
+        if (!p.second)
+          state.newly_spent.insert(p);
+      break;
     }
   }
 
