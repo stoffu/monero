@@ -103,7 +103,7 @@ namespace cryptonote
   bool calculate_transaction_prunable_hash(const transaction& t, crypto::hash& res);
   crypto::hash get_transaction_prunable_hash(const transaction& t);
   bool calculate_transaction_hash(const transaction& t, crypto::hash& res, size_t* blob_size);
-  crypto::hash get_pruned_transaction_hash(const transaction& t, const crypto::hash &pruned_data_hash);
+  crypto::hash get_pruned_transaction_hash(const transaction& t, const crypto::hash &pruned_data_hash, uint64_t tx_size);
 
   blobdata get_block_hashing_blob(const block& b);
   bool calculate_block_hash(const block& b, crypto::hash& res);

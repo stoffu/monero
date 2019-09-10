@@ -811,16 +811,18 @@ namespace cryptonote
     return res;
   }
   //---------------------------------------------------------------
-  crypto::hash get_pruned_transaction_hash(const transaction& t, const crypto::hash &pruned_data_hash)
+  crypto::hash get_pruned_transaction_hash(const transaction& t, const crypto::hash &pruned_data_hash, uint64_t tx_size)
   {
     // v1.0 transactions hash the entire blob
     CHECK_AND_ASSERT_THROW_MES(t.version > 1 || (t.version == 1 && t.minor_version > 0), "Hash for pruned v1.0 tx cannot be calculated");
 
     if (t.version == 1)
     {
-      crypto::hash hashes[2];
+      crypto::hash hashes[3];
       get_transaction_prefix_hash(t, hashes[0]);
       hashes[1] = pruned_data_hash;
+      hashes[2] = crypto::null_hash;
+      *(uint64_t*)&hashes[2] = tx_size;
       crypto::hash res = cn_fast_hash(hashes, sizeof(hashes));
       return res;
     }
@@ -864,9 +866,11 @@ namespace cryptonote
     // v1.1 transactions hash similarly to v2, but only using 2 parts
     if (t.version == 1)
     {
-      crypto::hash hashes[2];
+      crypto::hash hashes[3];
       get_transaction_prefix_hash(t, hashes[0]);
       CHECK_AND_ASSERT_MES(calculate_transaction_prunable_hash(t, hashes[1]), false, "Failed to get tx prunable hash");
+      hashes[2] = crypto::null_hash;
+      *(uint64_t*)&hashes[2] = (uint64_t)get_object_blobsize(t);;
       res = cn_fast_hash(hashes, sizeof(hashes));
       if (blob_size)
         *blob_size = get_object_blobsize(t);
