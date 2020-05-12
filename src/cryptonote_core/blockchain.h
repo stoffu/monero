@@ -291,6 +291,13 @@ namespace cryptonote
     difficulty_type get_difficulty_for_next_block();
 
     /**
+     * @brief recalculate difficulties of all existing blocks to circumvent the annoying 'difficulty drift' bug
+     *
+     * @return number of blocks whose difficulties got corrected
+     */
+    size_t recalculate_difficulties();
+
+    /**
      * @brief adds a block to the blockchain
      *
      * Adds a new block to the blockchain.  If the block's parent is not the

@@ -193,6 +193,13 @@ namespace cryptonote
     "is acted upon."
   , ""
   };
+  static const command_line::arg_descriptor<bool> arg_recalculate_difficulties = {
+    "recalculate-difficulties"
+  , "On startup, recalculate difficulties of all blocks so that any possible "
+    "miscalculated values can get corrected."
+  , ""
+  , false
+  };
 
   //-----------------------------------------------------------------------------------------------
   core::core(i_cryptonote_protocol* pprotocol):
@@ -305,6 +312,7 @@ namespace cryptonote
     command_line::add_arg(desc, arg_block_notify);
     command_line::add_arg(desc, arg_reorg_notify);
     command_line::add_arg(desc, arg_block_rate_notify);
+    command_line::add_arg(desc, arg_recalculate_difficulties);
 
     miner::init_options(desc);
     BlockchainDB::init_options(desc);
@@ -624,6 +632,9 @@ namespace cryptonote
     CHECK_AND_ASSERT_MES(r, false, "Failed to initialize blockchain storage");
 
     block_sync_size = command_line::get_arg(vm, arg_block_sync_size);
+
+    if (!command_line::is_arg_defaulted(vm, arg_recalculate_difficulties))
+      recalculate_difficulties();
 
     MGINFO("Loading checkpoints");
 
@@ -1530,6 +1541,7 @@ namespace cryptonote
     m_check_updates_interval.do_call(boost::bind(&core::check_updates, this));
     m_check_disk_space_interval.do_call(boost::bind(&core::check_disk_space, this));
     m_block_rate_interval.do_call(boost::bind(&core::check_block_rate, this));
+    m_diff_recalc_interval.do_call(boost::bind(&core::recalculate_difficulties, this));
     m_miner.on_idle();
     m_mempool.on_idle();
     return true;
@@ -1747,6 +1759,12 @@ namespace cryptonote
       }
     }
 
+    return true;
+  }
+  //-----------------------------------------------------------------------------------------------
+  bool core::recalculate_difficulties()
+  {
+    m_blockchain_storage.recalculate_difficulties();
     return true;
   }
   //-----------------------------------------------------------------------------------------------

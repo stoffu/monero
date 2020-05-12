@@ -987,6 +987,15 @@ public:
   virtual difficulty_type get_block_difficulty(const uint64_t& height) const = 0;
 
   /**
+   * @brief overwrites a block's cumulative difficulty that was incorrectly calculated due to the 'difficulty drift' bug
+   *
+   * If the block does not exist, the subclass should throw BLOCK_DNE
+   *
+   * @param height the height of the block to be overwritten
+   */
+  virtual void overwrite_block_cumulative_difficulty(const uint64_t& height, const difficulty_type& new_cumulative_difficulty) = 0;
+
+  /**
    * @brief fetch a block's already generated coins
    *
    * The subclass should return the total coins generated as of the block

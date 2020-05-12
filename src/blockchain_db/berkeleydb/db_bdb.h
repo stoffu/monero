@@ -272,6 +272,8 @@ public:
 
   virtual difficulty_type get_block_difficulty(const uint64_t& height) const;
 
+  virtual void overwrite_block_cumulative_difficulty(const uint64_t& height, const difficulty_type& new_cumulative_difficulty);
+
   virtual uint64_t get_block_already_generated_coins(const uint64_t& height) const;
 
   virtual crypto::hash get_block_hash_from_height(const uint64_t& height) const;
