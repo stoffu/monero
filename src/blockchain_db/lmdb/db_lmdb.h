@@ -213,6 +213,8 @@ public:
 
   virtual difficulty_type get_block_difficulty(const uint64_t& height) const;
 
+  virtual void overwrite_block_cumulative_difficulty(const uint64_t& height, const difficulty_type& new_cumulative_difficulty);
+
   virtual uint64_t get_block_already_generated_coins(const uint64_t& height) const;
 
   virtual uint64_t get_block_long_term_weight(const uint64_t& height) const;

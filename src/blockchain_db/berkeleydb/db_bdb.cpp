@@ -1406,6 +1406,10 @@ difficulty_type BlockchainBDB::get_block_difficulty(const uint64_t& height) cons
     return diff1 - diff2;
 }
 
+void BlockchainBDB::overwrite_block_cumulative_difficulty(const uint64_t& height, const difficulty_type& new_cumulative_difficulty)
+{
+}
+
 uint64_t BlockchainBDB::get_block_already_generated_coins(const uint64_t& height) const
 {
     LOG_PRINT_L3("BlockchainBDB::" << __func__);

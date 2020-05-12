@@ -2175,6 +2175,34 @@ difficulty_type BlockchainLMDB::get_block_difficulty(const uint64_t& height) con
   return diff1 - diff2;
 }
 
+void BlockchainLMDB::overwrite_block_cumulative_difficulty(const uint64_t& height, const difficulty_type& new_cumulative_difficulty)
+{
+  LOG_PRINT_L3("BlockchainLMDB::" << __func__);
+  check_open();
+  mdb_txn_cursors *m_cursors = &m_wcursors;
+
+  int result = 0;
+  block_txn_start(false);
+  CURSOR(block_info)
+
+  MDB_val_set(key, height);
+  result = mdb_cursor_get(m_cur_block_info, (MDB_val *)&zerokval, &key, MDB_GET_BOTH);
+  if (result)
+    throw1(BLOCK_DNE(lmdb_error("Failed to get block info: ", result).c_str()));
+
+  mdb_block_info bi = *(mdb_block_info*)key.mv_data;
+  bi.bi_diff_hi = ((new_cumulative_difficulty >> 64) & 0xffffffffffffffff).convert_to<uint64_t>();
+  bi.bi_diff_lo = (new_cumulative_difficulty & 0xffffffffffffffff).convert_to<uint64_t>();
+
+  MDB_val_set(key2, height);
+  MDB_val_set(val, bi);
+  result = mdb_cursor_put(m_cur_block_info, &key2, &val, MDB_CURRENT);
+  if (result)
+    throw0(DB_ERROR(lmdb_error("Failed to overwrite block info to db transaction: ", result).c_str()));
+
+  block_txn_stop();
+}
+
 uint64_t BlockchainLMDB::get_block_already_generated_coins(const uint64_t& height) const
 {
   LOG_PRINT_L3("BlockchainLMDB::" << __func__);
