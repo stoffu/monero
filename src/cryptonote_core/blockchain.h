@@ -291,11 +291,20 @@ namespace cryptonote
     difficulty_type get_difficulty_for_next_block();
 
     /**
-     * @brief recalculate difficulties of all existing blocks to circumvent the annoying 'difficulty drift' bug
+     * @brief check currently stored difficulties against difficulty checkpoints
+     *
+     * @return the last checkpoint height before the difficulty drift bug starts
+     */
+    uint64_t check_difficulty_checkpoints();
+
+    /**
+     * @brief recalculate difficulties for blocks after the last difficulty checkpoints to circumvent the annoying 'difficulty drift' bug
+     *
+     * @param start_height: if omitted, starts recalculation from the last difficulty checkpoint
      *
      * @return number of blocks whose difficulties got corrected
      */
-    size_t recalculate_difficulties();
+    size_t recalculate_difficulties(boost::optional<uint64_t> start_height = boost::none);
 
     /**
      * @brief adds a block to the blockchain

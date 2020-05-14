@@ -479,6 +479,13 @@ bool Blockchain::init(BlockchainDB* db, const network_type nettype, bool offline
     m_long_term_block_weights_cache_rolling_median = epee::misc_utils::rolling_median_t<uint64_t>(m_long_term_block_weights_window);
   }
 
+  uint64_t last_correct_difficulty_checkpoint_height = check_difficulty_checkpoints();
+  if (last_correct_difficulty_checkpoint_height != m_checkpoints.get_difficulty_points().rbegin()->first)
+  {
+    MERROR("Difficulty drift detected!");
+    recalculate_difficulties(last_correct_difficulty_checkpoint_height);
+  }
+
   if (!update_next_cumulative_weight_limit())
     return false;
   return true;
@@ -875,19 +882,31 @@ difficulty_type Blockchain::get_difficulty_for_next_block()
   return diff;
 }
 //------------------------------------------------------------------
-size_t Blockchain::recalculate_difficulties()
+uint64_t Blockchain::check_difficulty_checkpoints()
+{
+  uint64_t res = 0;
+  for (const std::pair<uint64_t, difficulty_type>& i : m_checkpoints.get_difficulty_points())
+  {
+    if (m_db->get_block_cumulative_difficulty(i.first) != i.second)
+      return res;
+    res = i.first;
+  }
+  return res;
+}
+//------------------------------------------------------------------
+size_t Blockchain::recalculate_difficulties(boost::optional<uint64_t> start_height_opt)
 {
   if (m_fixed_difficulty)
   {
     return 0;
   }
-  const uint64_t start_height = 2;
-  const uint64_t top_height = m_db->height() - 1;
-
   LOG_PRINT_L3("Blockchain::" << __func__);
+  CRITICAL_REGION_LOCAL(m_blockchain_lock);
+
+  const uint64_t start_height = start_height_opt ? *start_height_opt : m_checkpoints.get_difficulty_points().rbegin()->first;
+  const uint64_t top_height = m_db->height() - 1;
   MGINFO("Recalculating difficulties from height " << start_height << " to height " << top_height);
 
-  CRITICAL_REGION_LOCAL(m_blockchain_lock);
   std::vector<uint64_t> timestamps;
   std::vector<difficulty_type> difficulties;
   timestamps.reserve(DIFFICULTY_BLOCKS_COUNT + 1);
@@ -900,7 +919,7 @@ size_t Blockchain::recalculate_difficulties()
     timestamps.insert(timestamps.begin(), m_db->get_block_timestamp(height));
     difficulties.insert(difficulties.begin(), m_db->get_block_cumulative_difficulty(height));
   }
-  size_t count_mainchain = 0;
+  size_t res = 0;
   for (uint64_t height = start_height; height <= top_height; ++height)
   {
     size_t target = get_ideal_hard_fork_version(height) < 2 && height < HARDFORK_1_HEIGHT ? DIFFICULTY_TARGET_V1 : DIFFICULTY_TARGET_V2;
@@ -908,14 +927,14 @@ size_t Blockchain::recalculate_difficulties()
     difficulty_type last_diff_reset_value = m_hardfork->get_last_diff_reset_value(height);
     difficulty_type recalculated_diff = next_difficulty(timestamps, difficulties, target, height, last_diff_reset_height, last_diff_reset_value);
 
-    boost::multiprecision::uint256_t recalculated_cum_diff_256 = recalculated_diff + difficulties.back();
+    boost::multiprecision::uint256_t recalculated_cum_diff_256 = boost::multiprecision::uint256_t(recalculated_diff) + difficulties.back();
     CHECK_AND_ASSERT_THROW_MES(recalculated_cum_diff_256 <= std::numeric_limits<difficulty_type>::max(), "Difficulty overflow!");
     difficulty_type recalculated_cum_diff = recalculated_cum_diff_256.convert_to<difficulty_type>();
 
     difficulty_type existing_cum_diff = m_db->get_block_cumulative_difficulty(height);
     if (recalculated_cum_diff != existing_cum_diff)
     {
-      if (count_mainchain++ == 0)
+      if (res++ == 0)
       {
         LOG_ERROR("Difficulty drift found at height: " << height << ", hash:" << m_db->get_block_hash_from_height(height) << ", existing:" << existing_cum_diff << ", recalculated:" << recalculated_cum_diff);
       }
@@ -942,91 +961,10 @@ size_t Blockchain::recalculate_difficulties()
       difficulties.erase(difficulties.begin());
     }
   }
-  // for alternative chains
-  std::unordered_set<crypto::hash> processed_alt_blocks;
-  size_t count_altchain = 0;
-  for (uint64_t height = start_height; height <= top_height; ++height)
-  {
-    for (auto &i: m_alternative_chains)
-    {
-      if (i.second.height != height || processed_alt_blocks.count(i.first) != 0)
-        continue;
-      // prepare timestamps & difficulties
-      timestamps.clear();
-      difficulties.clear();
-      // walk along alt blocks till reaching main chain
-      auto j = m_alternative_chains.find(i.second.bl.prev_id);
-      crypto::hash last_prev_id = i.second.bl.prev_id;
-      while (j != m_alternative_chains.end() && timestamps.size() < DIFFICULTY_BLOCKS_COUNT)
-      {
-        timestamps.insert(timestamps.begin(), j->second.bl.timestamp);
-        difficulties.insert(difficulties.begin(), j->second.cumulative_difficulty);
-        last_prev_id = j->second.bl.prev_id;
-        j = m_alternative_chains.find(j->second.bl.prev_id);
-      }
-      // walk over main chain deep enough
-      uint64_t mainchain_height = m_db->get_block_height(last_prev_id);
-      while (mainchain_height > 0 && timestamps.size() < DIFFICULTY_BLOCKS_COUNT)
-      {
-        timestamps.insert(timestamps.begin(), m_db->get_block_timestamp(mainchain_height));
-        difficulties.insert(difficulties.begin(), m_db->get_block_cumulative_difficulty(mainchain_height));
-        --mainchain_height;
-      }
-      // process alt block and all its successors
-      uint64_t altchain_height = height;
-      j = m_alternative_chains.find(i.first);
-      while (true)
-      {
-        CHECK_AND_ASSERT_THROW_MES(processed_alt_blocks.count(j->first) == 0, "alt block " << j->first << " already processed!");
-        processed_alt_blocks.insert(j->first);
-        size_t target = get_ideal_hard_fork_version(altchain_height) < 2 && altchain_height < HARDFORK_1_HEIGHT ? DIFFICULTY_TARGET_V1 : DIFFICULTY_TARGET_V2;
-        uint64_t last_diff_reset_height = m_hardfork->get_last_diff_reset_height(altchain_height);
-        difficulty_type last_diff_reset_value = m_hardfork->get_last_diff_reset_value(altchain_height);
-        difficulty_type recalculated_diff = next_difficulty(timestamps, difficulties, target, altchain_height, last_diff_reset_height, last_diff_reset_value);
 
-        boost::multiprecision::uint256_t recalculated_cum_diff_256 = recalculated_diff + difficulties.back();
-        CHECK_AND_ASSERT_THROW_MES(recalculated_cum_diff_256 <= std::numeric_limits<difficulty_type>::max(), "Difficulty overflow!");
-        difficulty_type recalculated_cum_diff = recalculated_cum_diff_256.convert_to<difficulty_type>();
-
-        if (recalculated_cum_diff != j->second.cumulative_difficulty)
-        {
-          if (count_altchain++ == 0)
-          {
-            LOG_ERROR("Difficulty drift found in alt chain at height:" << altchain_height << ", hash:" << j->first << ", existing:" << j->second.cumulative_difficulty << ", recalculated:" << recalculated_cum_diff);
-          }
-          j->second.cumulative_difficulty = recalculated_cum_diff;
-        }
-
-        timestamps.push_back(j->second.bl.timestamp);
-        difficulties.push_back(recalculated_cum_diff);
-        if (timestamps.size() > DIFFICULTY_BLOCKS_COUNT)
-        {
-          CHECK_AND_ASSERT_THROW_MES(timestamps.size() == DIFFICULTY_BLOCKS_COUNT + 1, "Wrong timestamps size: " << timestamps.size());
-          timestamps.erase(timestamps.begin());
-          difficulties.erase(difficulties.begin());
-        }
-
-        bool next_found = false;
-        for (auto &k: m_alternative_chains)
-        {
-          if (k.second.bl.prev_id == j->first)
-          {
-            j = m_alternative_chains.find(k.first);
-            next_found = true;
-          }
-        }
-        if (!next_found)
-          break;
-        ++altchain_height;
-      }
-    }
-    if (processed_alt_blocks.size() == m_alternative_chains.size())
-      break;
-  }
-
-  if (count_mainchain + count_altchain > 0)
-    LOG_ERROR("Corrected difficulties for " << count_mainchain << " blocks in main chain, " << count_altchain << " blocks in alt chain");
-  return count_mainchain + count_altchain;
+  if (res > 0)
+    LOG_ERROR("Corrected difficulties for " << res << " blocks");
+  return res;
 }
 //------------------------------------------------------------------
 std::vector<time_t> Blockchain::get_last_block_timestamps(unsigned int blocks) const
