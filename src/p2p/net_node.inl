@@ -31,6 +31,7 @@
 // IP blocking adapted from Boolberry
 
 #include <algorithm>
+#include <boost/bind/bind.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/bind.hpp>
