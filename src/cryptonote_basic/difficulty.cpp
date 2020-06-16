@@ -119,7 +119,7 @@ namespace cryptonote {
     return !carry;
   }
 
-  uint64_t next_difficulty_64(std::vector<std::uint64_t> timestamps, std::vector<uint64_t> cumulative_difficulties, size_t target_seconds, uint64_t height, uint64_t last_diff_reset_height, uint64_t last_diff_reset_value) {
+  uint64_t next_difficulty_64(std::vector<std::uint64_t> timestamps, std::vector<uint64_t> cumulative_difficulties, size_t target_seconds, uint64_t height, uint64_t last_diff_reset_height, uint64_t last_diff_reset_value, uint8_t version) {
 
     bool is_diff_reset = false;
     if (last_diff_reset_height != 0 && height >= last_diff_reset_height && height - last_diff_reset_height < timestamps.size())
@@ -132,8 +132,16 @@ namespace cryptonote {
 
     if(timestamps.size() > DIFFICULTY_WINDOW)
     {
-      timestamps.resize(DIFFICULTY_WINDOW);
-      cumulative_difficulties.resize(DIFFICULTY_WINDOW);
+      if (version >= HF_VERSION_REMOVE_DIFFICULTY_LAG_CUT)
+      {
+        timestamps = std::vector<uint64_t>(timestamps.end() - DIFFICULTY_WINDOW, timestamps.end());
+        cumulative_difficulties = std::vector<uint64_t>(cumulative_difficulties.end() - DIFFICULTY_WINDOW, cumulative_difficulties.end());
+      }
+      else
+      {
+        timestamps.resize(DIFFICULTY_WINDOW);
+        cumulative_difficulties.resize(DIFFICULTY_WINDOW);
+      }
     }
 
 
@@ -151,7 +159,7 @@ namespace cryptonote {
     sort(timestamps.begin(), timestamps.end());
     size_t cut_begin, cut_end;
     static_assert(2 * DIFFICULTY_CUT <= DIFFICULTY_WINDOW - 2, "Cut length is too large");
-    if (length <= DIFFICULTY_WINDOW - 2 * DIFFICULTY_CUT) {
+    if (length <= DIFFICULTY_WINDOW - 2 * DIFFICULTY_CUT || version >= HF_VERSION_REMOVE_DIFFICULTY_LAG_CUT) {
       cut_begin = 0;
       cut_end = length;
     } else {
@@ -218,7 +226,7 @@ namespace cryptonote {
       return check_hash_128(hash, difficulty);
   }
 
-  difficulty_type next_difficulty(std::vector<uint64_t> timestamps, std::vector<difficulty_type> cumulative_difficulties, size_t target_seconds, uint64_t height, uint64_t last_diff_reset_height, difficulty_type last_diff_reset_value) {
+  difficulty_type next_difficulty(std::vector<uint64_t> timestamps, std::vector<difficulty_type> cumulative_difficulties, size_t target_seconds, uint64_t height, uint64_t last_diff_reset_height, difficulty_type last_diff_reset_value, uint8_t version) {
 
     bool is_diff_reset = false;
     if (last_diff_reset_height != 0 && height >= last_diff_reset_height && height - last_diff_reset_height < timestamps.size())
@@ -232,8 +240,16 @@ namespace cryptonote {
     //cutoff DIFFICULTY_LAG
     if(timestamps.size() > DIFFICULTY_WINDOW)
     {
-      timestamps.resize(DIFFICULTY_WINDOW);
-      cumulative_difficulties.resize(DIFFICULTY_WINDOW);
+      if (version >= HF_VERSION_REMOVE_DIFFICULTY_LAG_CUT)
+      {
+        timestamps = std::vector<uint64_t>(timestamps.end() - DIFFICULTY_WINDOW, timestamps.end());
+        cumulative_difficulties = std::vector<difficulty_type>(cumulative_difficulties.end() - DIFFICULTY_WINDOW, cumulative_difficulties.end());
+      }
+      else
+      {
+        timestamps.resize(DIFFICULTY_WINDOW);
+        cumulative_difficulties.resize(DIFFICULTY_WINDOW);
+      }
     }
 
 
@@ -251,7 +267,7 @@ namespace cryptonote {
     sort(timestamps.begin(), timestamps.end());
     size_t cut_begin, cut_end;
     static_assert(2 * DIFFICULTY_CUT <= DIFFICULTY_WINDOW - 2, "Cut length is too large");
-    if (length <= DIFFICULTY_WINDOW - 2 * DIFFICULTY_CUT) {
+    if (length <= DIFFICULTY_WINDOW - 2 * DIFFICULTY_CUT || version >= HF_VERSION_REMOVE_DIFFICULTY_LAG_CUT) {
       cut_begin = 0;
       cut_end = length;
     } else {
