@@ -9,7 +9,7 @@ cache:
   - $HOME/.ccache
 env:
   global:
-    - MAKEJOBS=-j3
+    - MAKEJOBS=-j1
     - RUN_TESTS=false
     - BOOST_TEST_RANDOM=1$TRAVIS_BUILD_ID
     - CCACHE_SIZE=100M
