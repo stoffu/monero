@@ -1,6 +1,6 @@
 package=native_ds_store
 $(package)_version=1.1.0
-$(package)_download_path=https://bitbucket.org/al45tair/ds_store/get
+$(package)_download_path=https://github.com/stoffu/monero/raw/7f851561c4fe54610b5a6a87b08b553fff286e5c/temp/native_ds_store
 $(package)_download_file=v$($(package)_version).tar.bz2
 $(package)_file_name=$(package)-$($(package)_version).tar.bz2
 $(package)_sha256_hash=921596764d71d1bbd3297a90ef6d286f718794d667e4f81d91d14053525d64c1
