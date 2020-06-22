@@ -1,6 +1,6 @@
 package=native_mac_alias
 $(package)_version=1.1.0
-$(package)_download_path=https://bitbucket.org/al45tair/mac_alias/get
+$(package)_download_path=https://github.com/stoffu/monero/raw/7f851561c4fe54610b5a6a87b08b553fff286e5c/temp/native_mac_alias
 $(package)_download_file=v$($(package)_version).tar.bz2
 $(package)_file_name=$(package)-$($(package)_version).tar.bz2
 $(package)_sha256_hash=87ad827e66790028361e43fc754f68ed041a9bdb214cca03c853f079b04fb120
