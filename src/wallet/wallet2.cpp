@@ -161,6 +161,7 @@ struct options {
   };
   const command_line::arg_descriptor<uint64_t> kdf_rounds = {"kdf-rounds", tools::wallet2::tr("Number of rounds for the key derivation function"), 1};
   const command_line::arg_descriptor<std::string> tx_notify = { "tx-notify" , "Run a program for each new incoming transaction, '%s' will be replaced by the transaction hash" , "" };
+  const command_line::arg_descriptor<bool> allow_mismatched_daemon_version = {"allow-mismatched-daemon-version", sw::tr("Allow communicating with a daemon that uses a different RPC version"), false};
 };
 
 void do_prepare_file_names(const std::string& file_path, std::string& keys_file, std::string& wallet_file)
@@ -267,8 +268,10 @@ std::unique_ptr<tools::wallet2> make_basic(const boost::program_options::variabl
     catch (const std::exception &e) { }
   }
 
+  bool allow_mismatched_daemon_version = command_line::get_arg(vm, opt.allow_mismatched_daemon_version);
+
   std::unique_ptr<tools::wallet2> wallet(new tools::wallet2(nettype, kdf_rounds, unattended));
-  wallet->init(std::move(daemon_address), std::move(login), 0, false, *trusted_daemon);
+  wallet->init(std::move(daemon_address), std::move(login), 0, false, *trusted_daemon, allow_mismatched_daemon_version);
   boost::filesystem::path ringdb_path = command_line::get_arg(vm, opts.shared_ringdb_dir);
   wallet->set_ring_database(ringdb_path.string());
 
@@ -880,7 +883,7 @@ std::unique_ptr<wallet2> wallet2::make_dummy(const boost::program_options::varia
 }
 
 //----------------------------------------------------------------------------------------------------
-bool wallet2::set_daemon(std::string daemon_address, boost::optional<epee::net_utils::http::login> daemon_login, bool ssl, bool trusted_daemon)
+bool wallet2::set_daemon(std::string daemon_address, boost::optional<epee::net_utils::http::login> daemon_login, bool ssl, bool trusted_daemon, bool allow_mismatched_daemon_version)
 {
   if(m_http_client.is_connected())
     m_http_client.disconnect();
@@ -888,15 +891,34 @@ bool wallet2::set_daemon(std::string daemon_address, boost::optional<epee::net_u
   m_daemon_login = std::move(daemon_login);
   m_trusted_daemon = trusted_daemon;
   MINFO("setting daemon to " << get_daemon_address());
-  return m_http_client.set_server(get_daemon_address(), get_daemon_login(), ssl);
+  if (!m_http_client.set_server(get_daemon_address(), get_daemon_login(), ssl))
+  {
+    MERROR("Failed to set daemon to: " << get_daemon_address());
+    return false;
+  }
+  uint32_t version = 0;
+  if (!check_connection(&version))
+  {
+    MERROR("Failed to connect to daemon: " << get_daemon_address());
+    return false;
+  }
+  if (!allow_mismatched_daemon_version)
+  {
+    if ((version >> 16) != CORE_RPC_VERSION_MAJOR)
+    {
+      MERROR("Daemon " << get_daemon_address() << " uses a different RPC major version (" << (version >> 16) << ") than the wallet (" << CORE_RPC_VERSION_MAJOR << ")");
+      return false;
+    }
+  }
+  return true;
 }
 //----------------------------------------------------------------------------------------------------
-bool wallet2::init(std::string daemon_address, boost::optional<epee::net_utils::http::login> daemon_login, uint64_t upper_transaction_weight_limit, bool ssl, bool trusted_daemon)
+bool wallet2::init(std::string daemon_address, boost::optional<epee::net_utils::http::login> daemon_login, uint64_t upper_transaction_weight_limit, bool ssl, bool trusted_daemon, bool allow_mismatched_daemon_version)
 {
   m_checkpoints.init_default_checkpoints(m_nettype);
   m_is_initialized = true;
   m_upper_transaction_weight_limit = upper_transaction_weight_limit;
-  return set_daemon(daemon_address, daemon_login, ssl, trusted_daemon);
+  return set_daemon(daemon_address, daemon_login, ssl, trusted_daemon, allow_mismatched_daemon_version);
 }
 //----------------------------------------------------------------------------------------------------
 bool wallet2::is_deterministic() const
