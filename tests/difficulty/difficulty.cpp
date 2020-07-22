@@ -81,6 +81,101 @@ static int test_wide_difficulty(const char *filename)
     return 0;
 }
 
+static int test_lagcut(bool with_lagcut, bool generate, const char *filename_base)
+{
+    vector<uint64_t> timestamps, cumulative_difficulties;
+    string filename = filename_base;
+    filename += with_lagcut ? "-w" : "-wo";
+    filename += ".txt";
+    fstream data(filename.c_str(), generate ? fstream::out : fstream::in);
+    uint64_t block_time, timestamp = 0;
+    uint64_t difficulty, cumulative_difficulty = 0;
+    size_t n = 0;
+    if (generate)
+    {
+        static const struct {
+          size_t num_blocks;
+          uint64_t real_hashrate;
+        } periods[] = {
+            {1000, 1000},
+            {3000, 10000},
+            {3000, 1000},
+            {500, 10000},
+            {1000, 1000},
+            {500, 100},
+            {1000, 1000},
+        };
+        uint64_t total_deviation = 0;
+        for (auto& p : periods)
+        {
+            for (size_t i = 0; i < p.num_blocks; ++i)
+            {
+                size_t begin, end;
+                if (n < DIFFICULTY_BLOCKS_COUNT) {
+                    begin = 0;
+                    end = n;
+                } else {
+                    end = n;
+                    begin = end - DIFFICULTY_BLOCKS_COUNT;
+                }
+                uint64_t difficulty = cryptonote::next_difficulty_64(
+                    vector<uint64_t>(timestamps.begin() + begin, timestamps.begin() + end),
+                    vector<uint64_t>(cumulative_difficulties.begin() + begin, cumulative_difficulties.begin() + end), DEFAULT_TEST_DIFFICULTY_TARGET, n + 1, 0, 0, with_lagcut ? 0 : HF_VERSION_REMOVE_DIFFICULTY_LAG_CUT);
+                block_time = difficulty / p.real_hashrate;
+                timestamps.push_back(timestamp += block_time);
+                cumulative_difficulties.push_back(cumulative_difficulty += difficulty);
+                ++n;
+                data << block_time << " " << difficulty << endl;
+                total_deviation += block_time > DEFAULT_TEST_DIFFICULTY_TARGET ? block_time - DEFAULT_TEST_DIFFICULTY_TARGET : DEFAULT_TEST_DIFFICULTY_TARGET - block_time;
+            }
+        }
+        cout << "Average block time: " << (timestamps.back() / (float)n) << ", total deviation: " << total_deviation << (with_lagcut ? " (with)" : " (without)") << endl;
+    }
+    else
+    {
+        std::vector<cryptonote::difficulty_type> wide_cumulative_difficulties;
+        cryptonote::difficulty_type wide_cumulative_difficulty = 0;
+        data.exceptions(fstream::badbit);
+        data.clear(data.rdstate());
+        while (data >> block_time >> difficulty) {
+            size_t begin, end;
+            if (n < DIFFICULTY_BLOCKS_COUNT) {
+                begin = 0;
+                end = n;
+            } else {
+                end = n;
+                begin = end - DIFFICULTY_BLOCKS_COUNT;
+            }
+            uint64_t res = cryptonote::next_difficulty_64(
+                vector<uint64_t>(timestamps.begin() + begin, timestamps.begin() + end),
+                vector<uint64_t>(cumulative_difficulties.begin() + begin, cumulative_difficulties.begin() + end), DEFAULT_TEST_DIFFICULTY_TARGET, n + 1, 0, 0, with_lagcut ? 0 : HF_VERSION_REMOVE_DIFFICULTY_LAG_CUT);
+            if (res != difficulty) {
+                cerr << "Wrong difficulty for block " << n << endl
+                    << "Expected: " << difficulty << endl
+                    << "Found: " << res << endl;
+                return 1;
+            }
+            cryptonote::difficulty_type wide_res = cryptonote::next_difficulty(
+                std::vector<uint64_t>(timestamps.begin() + begin, timestamps.begin() + end),
+                std::vector<cryptonote::difficulty_type>(wide_cumulative_difficulties.begin() + begin, wide_cumulative_difficulties.begin() + end), DEFAULT_TEST_DIFFICULTY_TARGET, n + 1, 0, 0, with_lagcut ? 0 : HF_VERSION_REMOVE_DIFFICULTY_LAG_CUT);
+            if ((wide_res & 0xffffffffffffffff).convert_to<uint64_t>() != res) {
+                cerr << "Wrong wide difficulty for block " << n << endl
+                    << "Expected: " << res << endl
+                    << "Found: " << wide_res << endl;
+                return 1;
+            }
+            timestamps.push_back(timestamp += block_time);
+            cumulative_difficulties.push_back(cumulative_difficulty += difficulty);
+            wide_cumulative_difficulties.push_back(wide_cumulative_difficulty += difficulty);
+            ++n;
+        }
+        if (!data.eof()) {
+            data.clear(fstream::badbit);
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         cerr << "Wrong arguments" << endl;
@@ -89,6 +184,14 @@ int main(int argc, char *argv[]) {
     if (argc == 3 && strcmp(argv[1], "--wide") == 0)
     {
         return test_wide_difficulty(argv[2]);
+    }
+    if (argc == 3 && strcmp(argv[1], "--lagcut-generate") == 0)
+    {
+        return test_lagcut(true, true, argv[2]) || test_lagcut(false, true, argv[2]);
+    }
+    if (argc == 3 && strcmp(argv[1], "--lagcut-check") == 0)
+    {
+        return test_lagcut(true, false, argv[2]) || test_lagcut(false, false, argv[2]);
     }
 
     vector<uint64_t> timestamps, cumulative_difficulties;
